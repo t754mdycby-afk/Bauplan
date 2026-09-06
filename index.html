@@ -1,0 +1,1945 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Bauplan-Zeichner</title>
+<!-- PWA: installierbar auf Home-Bildschirm, eigenes Icon, Vollbild ohne Browserleiste -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#2563eb">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Bauplan">
+<style>
+  :root{
+    --bg:#f4f5f7; --panel:#ffffff; --border:#dde1e6; --text:#1f2430; --muted:#6b7280;
+    --accent:#2563eb; --accent-light:#e8f0fe; --danger:#dc2626; --grid-major:#c7ccd4; --grid-minor:#e5e8ec;
+    --toolbar-w:56px; --panel-w:280px; --topbar-h:44px; --menubar-h:34px; --statusbar-h:28px;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;color:var(--text);background:var(--bg);overflow:hidden;}
+  button{font-family:inherit;}
+  #app{display:flex;flex-direction:column;height:100%;}
+
+  /* Menüleiste */
+  #menubar{height:var(--menubar-h);display:flex;align-items:center;gap:2px;padding:0 8px;background:var(--panel);border-bottom:1px solid var(--border);font-size:13px;flex:0 0 auto;}
+  .menu-item{position:relative;}
+  .menu-btn{background:none;border:none;padding:6px 10px;cursor:pointer;border-radius:4px;color:var(--text);font-size:13px;}
+  .menu-btn:hover{background:var(--accent-light);}
+  .menu-dropdown{display:none;position:absolute;top:100%;left:0;background:var(--panel);border:1px solid var(--border);border-radius:6px;box-shadow:0 6px 20px rgba(0,0,0,.12);min-width:190px;z-index:50;padding:4px;}
+  .menu-item.open .menu-dropdown{display:block;}
+  .menu-dropdown button{display:flex;width:100%;justify-content:space-between;gap:10px;text-align:left;background:none;border:none;padding:7px 10px;border-radius:4px;cursor:pointer;font-size:13px;color:var(--text);}
+  .menu-dropdown button:hover{background:var(--accent-light);}
+  .menu-dropdown kbd{color:var(--muted);font-size:11px;}
+  #appTitle{font-weight:600;margin-right:10px;font-size:13px;color:var(--accent);}
+
+  /* Top-Statuszeile mit Projektname / Maßstab */
+  #topbar{height:var(--topbar-h);display:flex;align-items:center;gap:14px;padding:0 12px;background:var(--panel);border-bottom:1px solid var(--border);font-size:12px;color:var(--muted);flex:0 0 auto;flex-wrap:wrap;}
+  #topbar select, #topbar input{font-size:12px;padding:4px 6px;border:1px solid var(--border);border-radius:5px;background:#fff;}
+  #topbar label{display:flex;align-items:center;gap:5px;}
+  #topbar .sep{width:1px;height:20px;background:var(--border);}
+
+  /* Hauptbereich */
+  #main{flex:1 1 auto;display:flex;min-height:0;}
+
+  /* Werkzeugleiste links */
+  #toolbar{width:var(--toolbar-w);flex:0 0 auto;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;padding:8px 0;gap:4px;overflow-y:auto;}
+  .tool-btn{width:42px;height:42px;border-radius:8px;border:1px solid transparent;background:none;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;color:var(--text);}
+  .tool-btn:hover{background:var(--accent-light);}
+  .tool-btn.active{background:var(--accent);color:#fff;}
+  .tool-sep{width:28px;height:1px;background:var(--border);margin:4px 0;}
+
+  /* Zeichenfläche */
+  #canvasWrap{flex:1 1 auto;position:relative;background:#fbfbfc;overflow:hidden;touch-action:none;}
+  #drawCanvas{position:absolute;top:0;left:0;display:block;background:#fff;}
+  #zoomCtrls{position:absolute;right:12px;bottom:12px;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--border);border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);}
+  #zoomCtrls button{width:34px;height:34px;border:none;background:none;cursor:pointer;font-size:16px;border-bottom:1px solid var(--border);}
+  #zoomCtrls button:last-child{border-bottom:none;}
+  #zoomCtrls button:hover{background:var(--accent-light);}
+  #miniMap{position:absolute;left:12px;bottom:12px;width:130px;height:90px;background:#fff;border:1px solid var(--border);border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.08);}
+
+  /* Rechtes Panel */
+  #sidePanel{width:var(--panel-w);flex:0 0 auto;background:var(--panel);border-left:1px solid var(--border);display:flex;flex-direction:column;min-height:0;}
+  #panelTabs{display:flex;border-bottom:1px solid var(--border);flex:0 0 auto;}
+  #panelTabs button{flex:1;padding:9px 4px;border:none;background:none;cursor:pointer;font-size:12px;color:var(--muted);border-bottom:2px solid transparent;}
+  #panelTabs button.active{color:var(--accent);border-color:var(--accent);font-weight:600;}
+  .panel-body{flex:1;overflow-y:auto;padding:10px;font-size:13px;}
+  .panel-body h4{margin:10px 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);}
+  .field-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px;}
+  .field-row label{color:var(--muted);font-size:12px;flex:0 0 auto;}
+  .field-row input, .field-row select{width:120px;padding:5px 6px;border:1px solid var(--border);border-radius:5px;font-size:12px;}
+  .empty-hint{color:var(--muted);font-size:12px;padding:10px 2px;}
+  .layer-row, .part-row{display:flex;align-items:center;gap:6px;padding:6px 4px;border-bottom:1px solid var(--border);font-size:12px;}
+  .layer-row input[type=text]{flex:1;border:1px solid transparent;background:none;font-size:12px;padding:2px;}
+  .layer-row input[type=text]:focus{border-color:var(--border);background:#fff;}
+  .icon-btn{border:none;background:none;cursor:pointer;font-size:14px;padding:2px 4px;color:var(--muted);}
+  .icon-btn:hover{color:var(--text);}
+  table.parts-table{width:100%;border-collapse:collapse;font-size:11.5px;}
+  table.parts-table th, table.parts-table td{border:1px solid var(--border);padding:4px 5px;text-align:left;}
+  table.parts-table th{background:#f7f8fa;}
+  .btn{padding:7px 12px;border-radius:6px;border:1px solid var(--border);background:#fff;cursor:pointer;font-size:12.5px;}
+  .btn:hover{background:var(--accent-light);}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .btn.primary:hover{filter:brightness(1.05);}
+  .btn.small{padding:4px 8px;font-size:11.5px;}
+  .btn-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
+
+  /* Statusleiste */
+  #statusbar{height:var(--statusbar-h);flex:0 0 auto;display:flex;align-items:center;gap:16px;padding:0 12px;background:var(--panel);border-top:1px solid var(--border);font-size:11.5px;color:var(--muted);}
+  #statusbar .sep{width:1px;height:14px;background:var(--border);}
+
+  /* Modal */
+  .modal-overlay{position:fixed;inset:0;background:rgba(20,24,32,.45);display:none;align-items:center;justify-content:center;z-index:100;}
+  /* Eingabe-/Bestätigungs-Modale müssen auch über einem geöffneten Sammelplatz liegen */
+  #genericOverlay, #confirmOverlay, #wizardOverlay{ z-index:200; }
+  .modal-overlay.show{display:flex;}
+  .modal{background:#fff;border-radius:10px;width:420px;max-width:92vw;max-height:86vh;overflow-y:auto;padding:18px 20px;box-shadow:0 20px 50px rgba(0,0,0,.25);}
+  .modal h3{margin:0 0 4px;font-size:16px;}
+  .modal p.sub{color:var(--muted);font-size:12.5px;margin:0 0 14px;}
+  .modal .steps{display:flex;gap:6px;margin-bottom:14px;}
+  .modal .steps span{flex:1;height:4px;border-radius:2px;background:var(--border);}
+  .modal .steps span.done{background:var(--accent);}
+  .modal-footer{display:flex;justify-content:space-between;margin-top:16px;}
+
+  /* Sammelplatz / Projekt-Galerie */
+  .project-card{border:1px solid var(--border);border-radius:10px;overflow:hidden;background:#fff;cursor:pointer;display:flex;flex-direction:column;transition:box-shadow .15s, transform .15s;}
+  .project-card:hover{box-shadow:0 6px 18px rgba(0,0,0,.12);transform:translateY(-2px);}
+  .project-card .thumb{height:110px;background:#f2f4f7;display:flex;align-items:center;justify-content:center;overflow:hidden;border-bottom:1px solid var(--border);}
+  .project-card .thumb img{width:100%;height:100%;object-fit:cover;}
+  .project-card .thumb .placeholder{font-size:26px;color:var(--muted);}
+  .project-card .meta{padding:8px 10px;flex:1;}
+  .project-card .meta .pname{font-size:12.5px;font-weight:600;margin-bottom:2px;word-break:break-word;}
+  .project-card .meta .pdate{font-size:11px;color:var(--muted);}
+  .project-card .card-actions{display:flex;border-top:1px solid var(--border);}
+  .project-card .card-actions button{flex:1;border:none;background:none;padding:6px 2px;font-size:11px;cursor:pointer;color:var(--muted);}
+  .project-card .card-actions button:hover{background:var(--accent-light);color:var(--accent);}
+  .project-card.new-card{align-items:center;justify-content:center;min-height:170px;border-style:dashed;color:var(--accent);font-size:14px;font-weight:600;background:var(--accent-light);}
+  .gallery-tab{border:1px solid var(--border);border-bottom:none;background:#f7f8fa;color:var(--muted);}
+  .gallery-tab.active{background:#fff;color:var(--accent);font-weight:600;}
+  .project-card.trashed .thumb{filter:grayscale(0.6) opacity(0.7);}
+  .project-card.trashed .meta .pdate{color:var(--danger);}
+
+  /* Mobile / Tablet Anpassungen */
+  @media (max-width: 900px){
+    :root{--toolbar-w:0px;}
+    #appTitle{font-size:12px;white-space:nowrap;}
+    #menubar{overflow-x:auto;}
+    .menu-btn{padding:6px 6px;white-space:nowrap;}
+    #toolbar{position:fixed;left:0;right:0;bottom:0;top:auto;width:100%;height:56px;flex-direction:row;border-right:none;border-top:1px solid var(--border);overflow-x:auto;z-index:20;}
+    #canvasWrap{padding-bottom:56px;}
+    #sidePanel{position:fixed;right:0;bottom:56px;top:auto;height:46vh;width:100%;max-width:100%;border-left:none;border-top:1px solid var(--border);transform:translateY(105%);transition:transform .2s ease;z-index:19;}
+    #sidePanel.open{transform:translateY(0);}
+    #panelToggle{display:inline-flex !important;}
+    #topbar{overflow-x:auto;}
+  }
+  #panelToggle{display:none;}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="menubar">
+    <span id="appTitle">🪵 Bauplan-Zeichner</span>
+    <button id="btnGallery" class="menu-btn" title="Zum Sammelplatz – alle Baupläne verwalten" style="font-weight:600;color:var(--accent);">➜ Sammelplatz</button>
+    <div class="menu-item" data-menu="datei">
+      <button class="menu-btn">Datei</button>
+      <div class="menu-dropdown">
+        <button data-action="new">Neues Projekt</button>
+        <button data-action="save-json">Projekt speichern (.json)</button>
+        <button data-action="load-json">Projekt laden…</button>
+        <button data-action="export-png">Export PNG</button>
+        <button data-action="export-pdf">Export PDF</button>
+      </div>
+    </div>
+    <div class="menu-item" data-menu="bearbeiten">
+      <button class="menu-btn">Bearbeiten</button>
+      <div class="menu-dropdown">
+        <button data-action="undo">Rückgängig <kbd>Ctrl+Z</kbd></button>
+        <button data-action="redo">Wiederholen <kbd>Ctrl+Y</kbd></button>
+        <button data-action="copy">Kopieren <kbd>Ctrl+C</kbd></button>
+        <button data-action="paste">Einfügen <kbd>Ctrl+V</kbd></button>
+        <button data-action="delete">Löschen <kbd>Entf</kbd></button>
+        <button data-action="selectall">Alles auswählen <kbd>Ctrl+A</kbd></button>
+      </div>
+    </div>
+    <div class="menu-item" data-menu="ansicht">
+      <button class="menu-btn">Ansicht</button>
+      <div class="menu-dropdown">
+        <button data-action="zoom-fit">Zoom auf Zeichnung</button>
+        <button data-action="zoom-100">Zoom auf 100%</button>
+        <button data-action="zoom-selection">Zoom auf Auswahl</button>
+        <button data-action="toggle-grid">Raster ein/aus</button>
+        <button data-action="toggle-snap">Snap ein/aus</button>
+      </div>
+    </div>
+    <div class="menu-item" data-menu="einfuegen">
+      <button class="menu-btn">Einfügen</button>
+      <div class="menu-dropdown">
+        <button data-action="insert-rect-exact">Rechteck (exakte Maße)…</button>
+        <button data-action="insert-woodpart">Holzbauteil…</button>
+        <button data-action="wizard-open">Hochbeet-Assistent…</button>
+        <button data-action="demo-load">Beispiel „Hochbeet“ laden</button>
+      </div>
+    </div>
+    <div class="menu-item" data-menu="hilfe">
+      <button class="menu-btn">Hilfe</button>
+      <div class="menu-dropdown">
+        <button data-action="help">Kurzanleitung</button>
+      </div>
+    </div>
+    <button id="panelToggle" class="btn small" style="margin-left:auto;">Panel</button>
+  </div>
+
+  <div id="storageBanner" style="display:none;background:#fff3cd;border-bottom:1px solid #f0d58c;color:#7a5c00;font-size:12px;padding:6px 12px;align-items:center;gap:8px;">
+    <span>⚠️ Speicherung im Browser ist in diesem Vorschau-Fenster nicht verfügbar. Der Sammelplatz funktioniert innerhalb dieser Sitzung normal, aber Baupläne bleiben nach dem Schließen <strong>nicht</strong> erhalten. Öffne die heruntergeladene Datei direkt in einem Browser-Tab, damit alles dauerhaft gespeichert wird.</span>
+    <button id="storageBannerClose" class="icon-btn" style="margin-left:auto;font-size:14px;">✕</button>
+  </div>
+  <div id="topbar">
+    <label>Projekt: <input id="projName" type="text" value="Neues Projekt" style="width:150px"></label>
+    <div class="sep"></div>
+    <label>Maßstab
+      <select id="scaleSelect">
+        <option value="1">1:1</option>
+        <option value="2">1:2</option>
+        <option value="5">1:5</option>
+        <option value="10" selected>1:10</option>
+        <option value="20">1:20</option>
+        <option value="50">1:50</option>
+        <option value="100">1:100</option>
+        <option value="custom">frei…</option>
+      </select>
+    </label>
+    <label>Einheit
+      <select id="unitSelect">
+        <option value="mm">mm</option>
+        <option value="cm" selected>cm</option>
+        <option value="m">m</option>
+        <option value="in">Zoll</option>
+      </select>
+    </label>
+    <div class="sep"></div>
+    <label><input type="checkbox" id="chkGrid" checked> Raster</label>
+    <label><input type="checkbox" id="chkSnap" checked> Snap</label>
+    <label><input type="checkbox" id="chkPrecision"> Präzisionsmodus</label>
+  </div>
+
+  <div id="main">
+    <div id="toolbar">
+      <button class="tool-btn active" data-tool="select" title="Auswahl (V)">↖</button>
+      <button class="tool-btn" data-tool="pan" title="Verschieben / Pan (H)">✋</button>
+      <div class="tool-sep"></div>
+      <button class="tool-btn" data-tool="line" title="Linie (L)">╱</button>
+      <button class="tool-btn" data-tool="rect" title="Rechteck (R)">▭</button>
+      <button class="tool-btn" data-tool="circle" title="Kreis (C)">◯</button>
+      <button class="tool-btn" data-tool="halfcircle" title="Halbkreis / Bogen (B)">◐</button>
+      <button class="tool-btn" data-tool="dimension" title="Maßlinie (D)">↔</button>
+      <button class="tool-btn" data-tool="text" title="Text (T)">A</button>
+      <div class="tool-sep"></div>
+      <button class="tool-btn" data-tool="woodpart" title="Holzteil">▤</button>
+      <button class="tool-btn" data-tool="hole" title="Bohrloch">◎</button>
+      <div class="tool-sep"></div>
+      <button class="tool-btn" id="btnUndo" title="Rückgängig">↺</button>
+      <button class="tool-btn" id="btnRedo" title="Wiederholen">↻</button>
+      <button class="tool-btn" id="btnDelete" title="Löschen">🗑</button>
+    </div>
+
+    <div id="canvasWrap">
+      <canvas id="drawCanvas"></canvas>
+      <div id="zoomCtrls">
+        <button id="zoomIn">+</button>
+        <button id="zoomOut">−</button>
+        <button id="zoomFit">⤢</button>
+      </div>
+    </div>
+
+    <div id="sidePanel">
+      <div id="panelTabs">
+        <button class="tab-btn active" data-tab="props">Eigenschaften</button>
+        <button class="tab-btn" data-tab="layers">Ebenen</button>
+        <button class="tab-btn" data-tab="parts">Stückliste</button>
+        <button class="tab-btn" data-tab="info">Projekt</button>
+      </div>
+      <div class="panel-body" id="panelProps"><div class="empty-hint">Kein Objekt ausgewählt.<br>Wähle ein Objekt auf der Zeichenfläche.</div></div>
+      <div class="panel-body" id="panelLayers" style="display:none;"></div>
+      <div class="panel-body" id="panelParts" style="display:none;"></div>
+      <div class="panel-body" id="panelInfo" style="display:none;"></div>
+    </div>
+  </div>
+
+  <div id="statusbar">
+    <span id="statTool">Werkzeug: Auswahl</span>
+    <div class="sep"></div>
+    <span id="statPos">X: 0 cm / Y: 0 cm</span>
+    <div class="sep"></div>
+    <span id="statZoom">Zoom: 100%</span>
+    <div class="sep"></div>
+    <span id="statScale">Maßstab: 1:10</span>
+    <div class="sep"></div>
+    <span id="statSnap">Snap: an</span>
+    <div class="sep"></div>
+    <span id="statSaved" style="margin-left:auto;">Gespeichert</span>
+  </div>
+</div>
+
+<!-- Wizard-Modal -->
+<div class="modal-overlay" id="wizardOverlay">
+  <div class="modal">
+    <h3>Hochbeet-Assistent</h3>
+    <p class="sub">Erstellt automatisch einen maßhaltigen Bauplan.</p>
+    <div class="steps"><span id="wstep1" class="done"></span><span id="wstep2"></span><span id="wstep3"></span></div>
+    <div id="wizardBody"></div>
+    <div class="modal-footer">
+      <button class="btn" id="wizardBack">Zurück</button>
+      <button class="btn primary" id="wizardNext">Weiter</button>
+    </div>
+  </div>
+</div>
+
+<!-- Generisches Eingabe-Modal (exakte Maße, Umbenennen etc.) -->
+<div class="modal-overlay" id="genericOverlay">
+  <div class="modal">
+    <h3 id="genericTitle">Eingabe</h3>
+    <div id="genericBody"></div>
+    <div class="modal-footer">
+      <button class="btn" id="genericCancel">Abbrechen</button>
+      <button class="btn primary" id="genericOk">Erstellen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bestätigungs-Modal (z.B. Löschen) -->
+<div class="modal-overlay" id="confirmOverlay">
+  <div class="modal" style="width:380px;">
+    <h3 id="confirmTitle">Bitte bestätigen</h3>
+    <p class="sub" id="confirmMessage" style="white-space:pre-line;"></p>
+    <div class="modal-footer">
+      <button class="btn" id="confirmCancelBtn">Abbrechen</button>
+      <button class="btn primary" id="confirmOkBtn" style="background:var(--danger);border-color:var(--danger);">Löschen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Sammelplatz: Übersicht aller Baupläne -->
+<div class="modal-overlay" id="galleryOverlay">
+  <div class="modal" style="width:min(96vw,980px);">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <h3>🗂 Sammelplatz</h3>
+        <p class="sub">Alle deine Baupläne an einem Ort – öffnen, duplizieren oder neu anlegen.</p>
+      </div>
+      <button class="btn" id="galleryCloseBtn">Zurück zur Zeichnung</button>
+    </div>
+    <div style="display:flex;gap:6px;margin-top:12px;border-bottom:1px solid var(--border);">
+      <button class="menu-btn gallery-tab active" id="galleryTabActive" style="border-radius:6px 6px 0 0;">Baupläne</button>
+      <button class="menu-btn gallery-tab" id="galleryTabTrash" style="border-radius:6px 6px 0 0;">🗑 Gelöscht <span id="trashCount"></span></button>
+    </div>
+    <div id="galleryGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px;margin-top:14px;"></div>
+  </div>
+</div>
+
+<input type="file" id="fileInput" accept="application/json" style="display:none">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+(function(){
+"use strict";
+
+/* =========================================================
+   1. GEOMETRIE / HILFSFUNKTIONEN
+   ========================================================= */
+const Geo = {
+  dist(x1,y1,x2,y2){ return Math.hypot(x2-x1, y2-y1); },
+  angleDeg(x1,y1,x2,y2){ return Math.atan2(y2-y1, x2-x1) * 180/Math.PI; },
+  round(v, digits=2){ const f=Math.pow(10,digits); return Math.round(v*f)/f; },
+  clamp(v,min,max){ return Math.min(max, Math.max(min, v)); },
+  uid(){ return 'id' + Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
+};
+
+// Einheiten-Umrechnung: intern wird ausschließlich in Zentimetern (cm) gerechnet.
+const Units = {
+  factors: { mm: 0.1, cm: 1, m: 100, in: 2.54 },
+  toCm(value, unit){ return value * (this.factors[unit] ?? 1); },
+  fromCm(value, unit){ return value / (this.factors[unit] ?? 1); },
+  format(valueCm, unit, digits=1){ return this.round2(this.fromCm(valueCm, unit), digits) + ' ' + unit; },
+  round2(v,d){ const f=Math.pow(10,d); return Math.round(v*f)/f; }
+};
+
+/* =========================================================
+   2. DATENMODELL
+   ========================================================= */
+function createDefaultLayers(){
+  return [
+    { id:'l-konstruktion', name:'Konstruktion', visible:true, locked:false },
+    { id:'l-holz',         name:'Holz',         visible:true, locked:false },
+    { id:'l-schrauben',    name:'Schrauben',    visible:true, locked:false },
+    { id:'l-bemassung',    name:'Bemaßung',     visible:true, locked:false },
+    { id:'l-text',         name:'Text',         visible:true, locked:false },
+    { id:'l-hilfslinien',  name:'Hilfslinien',  visible:true, locked:false },
+  ];
+}
+
+function newProject(){
+  return {
+    meta:{
+      name:'Neues Projekt', description:'', author:'', version:'1.0',
+      date:new Date().toISOString().slice(0,10),
+      unit:'cm', scale:10, notes:''
+    },
+    layers:createDefaultLayers(),
+    shapes:[]
+  };
+}
+
+// Shape-Factory: jedes Objekt liegt in Weltkoordinaten (cm)
+const Shapes = {
+  line(x1,y1,x2,y2,layer){ return {id:Geo.uid(),type:'line',layer,x1,y1,x2,y2,strokeWidth:0.15,color:'#1f2430'}; },
+  rect(x,y,w,h,layer){ return {id:Geo.uid(),type:'rect',layer,x,y,w,h,strokeWidth:0.15,color:'#1f2430',fill:'transparent'}; },
+  circle(cx,cy,r,layer){ return {id:Geo.uid(),type:'circle',layer,cx,cy,r,strokeWidth:0.15,color:'#1f2430',fill:'transparent'}; },
+  text(x,y,text,layer){ return {id:Geo.uid(),type:'text',layer,x,y,text,size:3.2,bold:false,italic:false,color:'#1f2430',rotation:0}; },
+  dimension(x1,y1,x2,y2,layer,offset=8){ return {id:Geo.uid(),type:'dimension',layer,x1,y1,x2,y2,offset,customText:''}; },
+  woodpart(x,y,w,h,layer,props){ return Object.assign({id:Geo.uid(),type:'woodpart',layer,x,y,w,h,strokeWidth:0.15,
+      material:'Fichte', bezeichnung:'Brett', anzahl:1, laenge:Geo.round(w), breite:Geo.round(h), staerke:2.8}, props||{}); },
+  hole(cx,cy,layer,props){ return Object.assign({id:Geo.uid(),type:'hole',layer,cx,cy,durchmesser:0.8,tiefe:0,art:'Durchgangsloch'}, props||{}); },
+  halfcircle(cx,cy,r,rotation,layer){ return {id:Geo.uid(),type:'halfcircle',layer,cx,cy,r,rotation:rotation||0,strokeWidth:0.15,color:'#1f2430',fill:'transparent'}; }
+};
+
+/* =========================================================
+   3. HISTORY (Undo / Redo)
+   ========================================================= */
+class History{
+  constructor(app){ this.app=app; this.stack=[]; this.index=-1; this.limit=100; }
+  snapshot(){
+    this.stack = this.stack.slice(0, this.index+1);
+    this.stack.push(JSON.stringify(this.app.project));
+    if(this.stack.length>this.limit) this.stack.shift();
+    this.index = this.stack.length-1;
+  }
+  undo(){
+    if(this.index<=0) return;
+    this.index--;
+    this.app.project = JSON.parse(this.stack[this.index]);
+    this.app.afterProjectReplaced();
+  }
+  redo(){
+    if(this.index>=this.stack.length-1) return;
+    this.index++;
+    this.app.project = JSON.parse(this.stack[this.index]);
+    this.app.afterProjectReplaced();
+  }
+}
+
+/* =========================================================
+   4. HAUPT-APP
+   ========================================================= */
+const STORE_KEY = 'bauplan_projects_store_v1';   // Sammelplatz: alle Baupläne
+const ACTIVE_KEY = 'bauplan_active_project_id_v1'; // zuletzt geöffneter Bauplan
+
+/* Sicherer Speicherzugriff: localStorage ist z.B. in eingebetteten Vorschau-
+   Fenstern (sandboxed iframes) oft blockiert. Statt dass ein nicht abgefangener
+   Fehler die gesamte Aktion abbricht, fällt die App dann automatisch auf einen
+   Speicher im Arbeitsspeicher zurück – innerhalb der Sitzung funktioniert dann
+   alles normal, nur bleibt nichts über einen Neustart der Seite hinaus erhalten. */
+const MemoryFallbackStore = {};
+let storageIsPersistent = true;
+const SafeStorage = {
+  get(key){
+    try{ return localStorage.getItem(key); }
+    catch(e){ storageIsPersistent=false; return Object.prototype.hasOwnProperty.call(MemoryFallbackStore,key) ? MemoryFallbackStore[key] : null; }
+  },
+  set(key,val){
+    try{ localStorage.setItem(key,val); return true; }
+    catch(e){ storageIsPersistent=false; MemoryFallbackStore[key]=val; return true; }
+  },
+  remove(key){
+    try{ localStorage.removeItem(key); }
+    catch(e){ storageIsPersistent=false; delete MemoryFallbackStore[key]; }
+  }
+};
+// Sofort beim Laden testen, ob echter Speicherzugriff möglich ist (z.B. blockiert in eingebetteten Vorschau-Fenstern)
+try{ const k='__bauplan_storage_test__'; localStorage.setItem(k,'1'); localStorage.removeItem(k); }
+catch(e){ storageIsPersistent = false; }
+
+class App{
+  constructor(){
+    this.canvas = document.getElementById('drawCanvas');
+    this.ctx = this.canvas.getContext('2d');
+    this.project = newProject();
+    this.history = new History(this);
+    this.camera = { panX:60, panY:60, zoom:1 };
+    this.basePxPerCm = 8; // Basis-Bildpunkte je cm bei Maßstab 1:1 und Zoom 1
+    this.tool = 'select';
+    this.snap = true;
+    this.showGrid = true;
+    this.precision = false;
+    this.selection = new Set();
+    this.clipboard = null;
+    this.drag = null; // aktueller Zeichen-/Verschiebe-Vorgang
+    this.pointers = new Map(); // aktive Pointer für Pinch/Pan
+    this.pinch = null;
+    this.dirty = false;
+    this.projectId = null; // ID des aktiven Bauplans im Sammelplatz-Speicher
+    this.galleryView = 'active'; // 'active' oder 'trash'
+
+    this.bindUI();
+    this.resizeCanvas();
+    window.addEventListener('resize', ()=>this.resizeCanvas());
+
+    this.initProjectStorage();
+    if(!storageIsPersistent){
+      const banner=document.getElementById('storageBanner');
+      banner.style.display='flex';
+      document.getElementById('storageBannerClose').addEventListener('click', ()=>{ banner.style.display='none'; });
+    }
+    this.history.snapshot();
+    this.render();
+    this.autosaveLoop();
+  }
+
+  /* ---------- Maßstab / Umrechnung ---------- */
+  get scaleDenominator(){ return this.project.meta.scale || 10; }
+  pxPerCm(){ return (this.basePxPerCm / this.scaleDenominator) * this.camera.zoom; }
+
+  worldToScreen(x,y){
+    const s=this.pxPerCm();
+    return { x:this.camera.panX + x*s, y:this.camera.panY + y*s };
+  }
+  screenToWorld(x,y){
+    const s=this.pxPerCm();
+    return { x:(x-this.camera.panX)/s, y:(y-this.camera.panY)/s };
+  }
+
+  /* ---------- Setup / Events ---------- */
+  bindUI(){
+    // Menüs
+    document.querySelectorAll('.menu-item').forEach(item=>{
+      const btn = item.querySelector('.menu-btn');
+      btn.addEventListener('click', (e)=>{
+        e.stopPropagation();
+        const wasOpen = item.classList.contains('open');
+        document.querySelectorAll('.menu-item').forEach(i=>i.classList.remove('open'));
+        if(!wasOpen) item.classList.add('open');
+      });
+    });
+    document.addEventListener('click', ()=>document.querySelectorAll('.menu-item').forEach(i=>i.classList.remove('open')));
+    document.querySelectorAll('.menu-dropdown button').forEach(b=>{
+      b.addEventListener('click', ()=>{ this.handleMenuAction(b.dataset.action); });
+    });
+
+    // Werkzeugleiste
+    document.querySelectorAll('.tool-btn[data-tool]').forEach(b=>{
+      b.addEventListener('click', ()=>this.setTool(b.dataset.tool));
+    });
+    document.getElementById('btnGallery').addEventListener('click', ()=>this.openGallery());
+    document.getElementById('galleryCloseBtn').addEventListener('click', ()=>this.closeGallery());
+    document.getElementById('galleryTabActive').addEventListener('click', ()=>this.setGalleryView('active'));
+    document.getElementById('galleryTabTrash').addEventListener('click', ()=>this.setGalleryView('trash'));
+    document.getElementById('btnUndo').addEventListener('click', ()=>this.undo());
+    document.getElementById('btnRedo').addEventListener('click', ()=>this.redo());
+    document.getElementById('btnDelete').addEventListener('click', ()=>this.deleteSelection());
+
+    // Zoom
+    document.getElementById('zoomIn').addEventListener('click', ()=>this.zoomBy(1.2));
+    document.getElementById('zoomOut').addEventListener('click', ()=>this.zoomBy(1/1.2));
+    document.getElementById('zoomFit').addEventListener('click', ()=>this.zoomToFit());
+
+    // Topbar
+    document.getElementById('projName').addEventListener('input', e=>{ this.project.meta.name=e.target.value; this.markDirty(); });
+    document.getElementById('scaleSelect').addEventListener('change', e=>{
+      if(e.target.value==='custom'){
+        const val = prompt('Eigener Maßstabsnenner (z.B. 25 für 1:25):', this.scaleDenominator);
+        const num = parseFloat(val);
+        if(num>0) this.project.meta.scale = num;
+      } else {
+        this.project.meta.scale = parseFloat(e.target.value);
+      }
+      this.markDirty(); this.render();
+    });
+    document.getElementById('unitSelect').addEventListener('change', e=>{ this.project.meta.unit=e.target.value; this.markDirty(); this.render(); this.renderProps(); });
+    document.getElementById('chkGrid').addEventListener('change', e=>{ this.showGrid=e.target.checked; this.render(); });
+    document.getElementById('chkSnap').addEventListener('change', e=>{ this.snap=e.target.checked; this.updateStatus(); });
+    document.getElementById('chkPrecision').addEventListener('change', e=>{ this.precision=e.target.checked; });
+
+    // Panel-Tabs
+    document.querySelectorAll('.tab-btn').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        document.querySelectorAll('.tab-btn').forEach(x=>x.classList.remove('active'));
+        b.classList.add('active');
+        ['props','layers','parts','info'].forEach(t=>{
+          document.getElementById('panel'+t[0].toUpperCase()+t.slice(1)).style.display = (t===b.dataset.tab)?'block':'none';
+        });
+        if(b.dataset.tab==='layers') this.renderLayers();
+        if(b.dataset.tab==='parts') this.renderParts();
+        if(b.dataset.tab==='info') this.renderInfo();
+      });
+    });
+    document.getElementById('panelToggle').addEventListener('click', ()=>{
+      document.getElementById('sidePanel').classList.toggle('open');
+    });
+
+    // Pointer-Events auf der Zeichenfläche (Maus, Touch, Apple Pencil einheitlich)
+    const wrap = document.getElementById('canvasWrap');
+    this.canvas.addEventListener('pointerdown', e=>this.onPointerDown(e));
+    window.addEventListener('pointermove', e=>this.onPointerMove(e));
+    window.addEventListener('pointerup', e=>this.onPointerUp(e));
+    window.addEventListener('pointercancel', e=>this.onPointerUp(e));
+    this.canvas.addEventListener('wheel', e=>this.onWheel(e), {passive:false});
+    this.canvas.addEventListener('contextmenu', e=>e.preventDefault());
+
+    // Tastatur
+    window.addEventListener('keydown', e=>this.onKeyDown(e));
+
+    // Modale
+    document.getElementById('genericCancel').addEventListener('click', ()=>this.closeGenericModal());
+    document.getElementById('fileInput').addEventListener('change', e=>this.onFileSelected(e));
+
+    this.bindWizard();
+  }
+
+  resizeCanvas(){
+    const wrap = document.getElementById('canvasWrap');
+    const dpr = window.devicePixelRatio || 1;
+    const w = wrap.clientWidth, h = wrap.clientHeight;
+    this.canvas.width = w*dpr; this.canvas.height = h*dpr;
+    this.canvas.style.width = w+'px'; this.canvas.style.height = h+'px';
+    this.ctx.setTransform(dpr,0,0,dpr,0,0);
+    this.render();
+  }
+
+  setTool(tool){
+    this.tool = tool;
+    document.querySelectorAll('.tool-btn[data-tool]').forEach(b=>b.classList.toggle('active', b.dataset.tool===tool));
+    document.getElementById('statTool').textContent = 'Werkzeug: ' + this.toolLabel(tool);
+    this.canvas.style.cursor = (tool==='pan') ? 'grab' : (tool==='select' ? 'default' : 'crosshair');
+  }
+  toolLabel(t){
+    return {select:'Auswahl',pan:'Verschieben',line:'Linie',rect:'Rechteck',circle:'Kreis',halfcircle:'Halbkreis',
+      dimension:'Maßlinie',text:'Text',woodpart:'Holzteil',hole:'Bohrloch'}[t] || t;
+  }
+
+  /* ---------- Grid / Snap ---------- */
+  gridSpacingCm(){
+    const s=this.pxPerCm();
+    const candidates=[0.1,0.2,0.5,1,2,5,10,20,50,100,200,500,1000];
+    for(const c of candidates){ if(c*s>=28) return c; }
+    return candidates[candidates.length-1];
+  }
+  snapPoint(x,y){
+    if(!this.snap) return {x,y};
+    const g = this.precision ? this.gridSpacingCm()/5 : this.gridSpacingCm();
+    return { x: Math.round(x/g)*g, y: Math.round(y/g)*g };
+  }
+
+  /* ---------- Rendering ---------- */
+  render(){
+    const ctx=this.ctx;
+    const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
+    ctx.clearRect(0,0,w,h);
+    ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,w,h);
+    if(this.showGrid) this.drawGrid(w,h);
+    this.drawAxes();
+    for(const shape of this.project.shapes){
+      const layer = this.project.layers.find(l=>l.id===shape.layer);
+      if(layer && layer.visible===false) continue;
+      this.drawShape(shape);
+    }
+    if(this.drag && this.drag.previewShape) this.drawShape(this.drag.previewShape, true);
+    this.drawSelectionHandles();
+    this.updateStatus();
+  }
+
+  drawGrid(w,h){
+    const ctx=this.ctx;
+    const minor = this.gridSpacingCm();
+    const major = minor*5;
+    const s = this.pxPerCm();
+    const originScreen = this.worldToScreen(0,0);
+    const drawSet=(spacing,color,lineWidth)=>{
+      ctx.strokeStyle=color; ctx.lineWidth=lineWidth;
+      const stepPx = spacing*s;
+      if(stepPx<3) return;
+      let x0 = originScreen.x % stepPx; if(x0<0) x0+=stepPx;
+      ctx.beginPath();
+      for(let x=x0;x<w;x+=stepPx){ ctx.moveTo(x,0); ctx.lineTo(x,h); }
+      let y0 = originScreen.y % stepPx; if(y0<0) y0+=stepPx;
+      for(let y=y0;y<h;y+=stepPx){ ctx.moveTo(0,y); ctx.lineTo(w,y); }
+      ctx.stroke();
+    };
+    drawSet(minor, getCssVar('--grid-minor'), 1);
+    drawSet(major, getCssVar('--grid-major'), 1);
+  }
+  drawAxes(){
+    const ctx=this.ctx; const o=this.worldToScreen(0,0);
+    ctx.strokeStyle='#b9c0cc'; ctx.lineWidth=1.4;
+    ctx.beginPath(); ctx.moveTo(o.x-14,o.y); ctx.lineTo(o.x+14,o.y); ctx.moveTo(o.x,o.y-14); ctx.lineTo(o.x,o.y+14); ctx.stroke();
+  }
+
+  drawShape(shape, isPreview){
+    const ctx=this.ctx;
+    const selected = this.selection.has(shape.id);
+    ctx.save();
+    ctx.strokeStyle = shape.color || '#1f2430';
+    ctx.lineWidth = Math.max(1,(shape.strokeWidth||0.15)*this.pxPerCm());
+    ctx.fillStyle = shape.fill && shape.fill!=='transparent' ? shape.fill : 'transparent';
+    if(isPreview){ ctx.setLineDash([6,4]); ctx.strokeStyle='#2563eb'; }
+    if(selected && !isPreview){ ctx.strokeStyle='#2563eb'; }
+
+    switch(shape.type){
+      case 'line':{
+        const a=this.worldToScreen(shape.x1,shape.y1), b=this.worldToScreen(shape.x2,shape.y2);
+        ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+        break;
+      }
+      case 'rect':{
+        const a=this.worldToScreen(shape.x,shape.y);
+        const wpx=shape.w*this.pxPerCm(), hpx=shape.h*this.pxPerCm();
+        if(ctx.fillStyle!=='transparent' && ctx.fillStyle) ctx.fillRect(a.x,a.y,wpx,hpx);
+        ctx.strokeRect(a.x,a.y,wpx,hpx);
+        break;
+      }
+      case 'woodpart':{
+        const a=this.worldToScreen(shape.x,shape.y);
+        const wpx=shape.w*this.pxPerCm(), hpx=shape.h*this.pxPerCm();
+        ctx.fillStyle='#f1e6d2'; ctx.fillRect(a.x,a.y,wpx,hpx);
+        ctx.strokeStyle= selected? '#2563eb' : '#8a6d3b'; ctx.strokeRect(a.x,a.y,wpx,hpx);
+        if(wpx>34 && hpx>12){
+          ctx.fillStyle='#5b4327'; ctx.font='11px sans-serif'; ctx.textBaseline='middle'; ctx.textAlign='center';
+          ctx.fillText(shape.bezeichnung||'', a.x+wpx/2, a.y+hpx/2);
+        }
+        break;
+      }
+      case 'circle':{
+        const c=this.worldToScreen(shape.cx,shape.cy); const r=shape.r*this.pxPerCm();
+        ctx.beginPath(); ctx.arc(c.x,c.y,r,0,Math.PI*2);
+        if(ctx.fillStyle!=='transparent' && ctx.fillStyle) ctx.fill();
+        ctx.stroke();
+        break;
+      }
+      case 'halfcircle':{
+        const c=this.worldToScreen(shape.cx,shape.cy); const r=shape.r*this.pxPerCm();
+        const a1=(shape.rotation||0)*Math.PI/180, a2=a1+Math.PI;
+        ctx.beginPath();
+        ctx.arc(c.x,c.y,r,a1,a2,false);
+        ctx.closePath(); // schließt mit der geraden Durchmesserlinie
+        if(ctx.fillStyle!=='transparent' && ctx.fillStyle) ctx.fill();
+        ctx.stroke();
+        break;
+      }
+      case 'hole':{
+        const c=this.worldToScreen(shape.cx,shape.cy); const r=(shape.durchmesser/2)*this.pxPerCm();
+        ctx.beginPath(); ctx.arc(c.x,c.y,Math.max(2,r),0,Math.PI*2); ctx.strokeStyle='#444'; ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(c.x-r,c.y); ctx.lineTo(c.x+r,c.y); ctx.moveTo(c.x,c.y-r); ctx.lineTo(c.x,c.y+r); ctx.stroke();
+        break;
+      }
+      case 'text':{
+        const p=this.worldToScreen(shape.x,shape.y);
+        ctx.save();
+        ctx.translate(p.x,p.y); ctx.rotate((shape.rotation||0)*Math.PI/180);
+        ctx.fillStyle = selected? '#2563eb' : (shape.color||'#1f2430');
+        const sizePx = Math.max(9, shape.size*this.pxPerCm()*0.6);
+        ctx.font = `${shape.italic?'italic ':''}${shape.bold?'bold ':''}${sizePx}px sans-serif`;
+        ctx.textBaseline='top';
+        ctx.fillText(shape.text, 0, 0);
+        ctx.restore();
+        break;
+      }
+      case 'dimension':{
+        this.drawDimension(shape, selected);
+        break;
+      }
+    }
+    ctx.restore();
+  }
+
+  drawDimension(shape, selected){
+    const ctx=this.ctx;
+    const s=this.pxPerCm();
+    const {x1,y1,x2,y2,offset} = shape;
+    const lenCm = Geo.dist(x1,y1,x2,y2);
+    const ang = Math.atan2(y2-y1, x2-x1);
+    const nx = -Math.sin(ang), ny = Math.cos(ang); // Normalenrichtung für Versatz
+    const off = offset;
+    const p1 = { x:x1+nx*off, y:y1+ny*off };
+    const p2 = { x:x2+nx*off, y:y2+ny*off };
+    const s1=this.worldToScreen(x1,y1), s2=this.worldToScreen(x2,y2);
+    const sp1=this.worldToScreen(p1.x,p1.y), sp2=this.worldToScreen(p2.x,p2.y);
+    ctx.strokeStyle = selected? '#2563eb' : '#444'; ctx.lineWidth=1;
+    ctx.beginPath(); // Maßhilfslinien
+    ctx.moveTo(s1.x,s1.y); ctx.lineTo(sp1.x,sp1.y);
+    ctx.moveTo(s2.x,s2.y); ctx.lineTo(sp2.x,sp2.y);
+    ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(sp1.x,sp1.y); ctx.lineTo(sp2.x,sp2.y); ctx.stroke(); // Maßlinie
+    // Pfeile
+    drawArrowHead(ctx, sp2, sp1, 7);
+    drawArrowHead(ctx, sp1, sp2, 7);
+    // Text
+    const unit=this.project.meta.unit;
+    const text = shape.customText || Units.format(lenCm, unit, 1);
+    const midx=(sp1.x+sp2.x)/2, midy=(sp1.y+sp2.y)/2;
+    ctx.save();
+    ctx.translate(midx,midy); ctx.rotate(Math.atan2(sp2.y-sp1.y, sp2.x-sp1.x));
+    ctx.fillStyle='#fff'; const tw=ctx.measureText(text).width+8;
+    ctx.fillRect(-tw/2,-10,tw,16);
+    ctx.fillStyle= selected? '#2563eb' : '#1f2430'; ctx.font='11px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(text,0,-2);
+    ctx.restore();
+  }
+
+  drawSelectionHandles(){
+    const ctx=this.ctx;
+    for(const id of this.selection){
+      const shape = this.project.shapes.find(s=>s.id===id);
+      if(!shape) continue;
+      const box = this.getShapeBounds(shape);
+      if(!box) continue;
+      const a=this.worldToScreen(box.x,box.y), b=this.worldToScreen(box.x+box.w,box.y+box.h);
+      ctx.save();
+      ctx.strokeStyle='#2563eb'; ctx.setLineDash([4,3]); ctx.lineWidth=1;
+      ctx.strokeRect(a.x-3,a.y-3,(b.x-a.x)+6,(b.y-a.y)+6);
+      ctx.restore();
+    }
+  }
+
+  getShapeBounds(shape){
+    switch(shape.type){
+      case 'line': return {x:Math.min(shape.x1,shape.x2),y:Math.min(shape.y1,shape.y2),w:Math.abs(shape.x2-shape.x1),h:Math.abs(shape.y2-shape.y1)};
+      case 'rect': case 'woodpart': return {x:shape.x,y:shape.y,w:shape.w,h:shape.h};
+      case 'circle': return {x:shape.cx-shape.r,y:shape.cy-shape.r,w:shape.r*2,h:shape.r*2};
+      case 'halfcircle': return {x:shape.cx-shape.r,y:shape.cy-shape.r,w:shape.r*2,h:shape.r*2};
+      case 'hole': return {x:shape.cx-shape.durchmesser/2,y:shape.cy-shape.durchmesser/2,w:shape.durchmesser,h:shape.durchmesser};
+      case 'text': return {x:shape.x,y:shape.y,w:Math.max(4,(shape.text||'').length*shape.size*0.55),h:shape.size*1.3};
+      case 'dimension': return {x:Math.min(shape.x1,shape.x2),y:Math.min(shape.y1,shape.y2),w:Math.abs(shape.x2-shape.x1)||0.1,h:Math.abs(shape.y2-shape.y1)||0.1};
+    }
+    return null;
+  }
+
+  /* ---------- Hit-Testing ---------- */
+  hitTest(wx,wy){
+    const tolCm = 6/this.pxPerCm();
+    for(let i=this.project.shapes.length-1;i>=0;i--){
+      const shape=this.project.shapes[i];
+      const layer=this.project.layers.find(l=>l.id===shape.layer);
+      if(layer && (layer.visible===false || layer.locked)) continue;
+      if(this.shapeContains(shape,wx,wy,tolCm)) return shape;
+    }
+    return null;
+  }
+  shapeContains(shape,x,y,tol){
+    switch(shape.type){
+      case 'line': return distToSegment(x,y,shape.x1,shape.y1,shape.x2,shape.y2) <= tol;
+      case 'dimension': return distToSegment(x,y,shape.x1,shape.y1,shape.x2,shape.y2) <= tol*3;
+      case 'rect': case 'woodpart': return x>=shape.x-tol && x<=shape.x+shape.w+tol && y>=shape.y-tol && y<=shape.y+shape.h+tol
+                    && (shape.type==='woodpart' || !(x>shape.x+tol*1.5 && x<shape.x+shape.w-tol*1.5 && y>shape.y+tol*1.5 && y<shape.y+shape.h-tol*1.5) || (shape.fill&&shape.fill!=='transparent'));
+      case 'circle': return Math.abs(Geo.dist(x,y,shape.cx,shape.cy)-shape.r) <= tol || Geo.dist(x,y,shape.cx,shape.cy)<=shape.r && shape.fill && shape.fill!=='transparent';
+      case 'halfcircle':{
+        const d=Geo.dist(x,y,shape.cx,shape.cy);
+        let ang=Math.atan2(y-shape.cy,x-shape.cx)*180/Math.PI; if(ang<0) ang+=360;
+        let a1=(shape.rotation||0)%360; if(a1<0)a1+=360; let a2=(a1+180)%360;
+        const within = a1<a2 ? (ang>=a1-2 && ang<=a2+2) : (ang>=a1-2 || ang<=a2+2);
+        if(Math.abs(d-shape.r)<=tol && within) return true;
+        // Durchmesserlinie (gerade Kante)
+        const p1x=shape.cx+shape.r*Math.cos(a1*Math.PI/180), p1y=shape.cy+shape.r*Math.sin(a1*Math.PI/180);
+        const p2x=shape.cx+shape.r*Math.cos(a2*Math.PI/180), p2y=shape.cy+shape.r*Math.sin(a2*Math.PI/180);
+        return distToSegment(x,y,p1x,p1y,p2x,p2y) <= tol || (d<=shape.r+tol && shape.fill && shape.fill!=='transparent');
+      }
+      case 'hole': return Geo.dist(x,y,shape.cx,shape.cy) <= (shape.durchmesser/2)+tol;
+      case 'text':{
+        const b=this.getShapeBounds(shape); return x>=b.x-tol && x<=b.x+b.w+tol && y>=b.y-tol-2 && y<=b.y+b.h+tol;
+      }
+    }
+    return false;
+  }
+
+  activeLayerId(){
+    const active = this.currentLayerId || this.project.layers[0].id;
+    return this.project.layers.find(l=>l.id===active) ? active : this.project.layers[0].id;
+  }
+
+  /* ---------- Pointer-Interaktion ---------- */
+  onPointerDown(e){
+    this.canvas.setPointerCapture(e.pointerId);
+    this.pointers.set(e.pointerId, {x:e.clientX,y:e.clientY});
+    if(this.pointers.size===2){ this.startPinch(); return; }
+    if(this.pointers.size>2) return;
+
+    const rect = this.canvas.getBoundingClientRect();
+    const sx=e.clientX-rect.left, sy=e.clientY-rect.top;
+    const world = this.screenToWorld(sx,sy);
+    const snapped = this.snapPoint(world.x, world.y);
+
+    if(this.tool==='pan' || e.button===1 || (e.button===2)){
+      this.drag = {mode:'pan', startScreen:{x:sx,y:sy}, startPan:{...this.camera}};
+      this.canvas.style.cursor='grabbing';
+      return;
+    }
+
+    if(this.tool==='select'){
+      const hit = this.hitTest(world.x, world.y);
+      if(hit){
+        const layer = this.project.layers.find(l=>l.id===hit.layer);
+        if(layer && layer.locked) return;
+        if(!this.selection.has(hit.id) && !e.shiftKey){ this.selection.clear(); }
+        this.selection.add(hit.id);
+        this.drag = {mode:'move', shapeIds:[...this.selection], start:world, origShapes: this.project.shapes.filter(s=>this.selection.has(s.id)).map(s=>({...s}))};
+      } else {
+        if(!e.shiftKey) this.selection.clear();
+        this.drag = {mode:'rubberband', start:world, startScreen:{x:sx,y:sy}};
+      }
+      this.renderProps(); this.render();
+      return;
+    }
+
+    if(this.tool==='line'){
+      this.drag = {mode:'draw-line', start:snapped};
+    } else if(this.tool==='rect'){
+      this.drag = {mode:'draw-rect', start:snapped};
+    } else if(this.tool==='circle'){
+      this.drag = {mode:'draw-circle', start:snapped};
+    } else if(this.tool==='halfcircle'){
+      this.drag = {mode:'draw-halfcircle', start:snapped};
+    } else if(this.tool==='dimension'){
+      this.drag = {mode:'draw-dimension', start:snapped};
+    } else if(this.tool==='woodpart'){
+      this.drag = {mode:'draw-woodpart', start:snapped};
+    } else if(this.tool==='text'){
+      const txt = prompt('Textinhalt:', 'Text');
+      if(txt){
+        const shape = Shapes.text(snapped.x, snapped.y, txt, this.activeLayerId());
+        this.project.shapes.push(shape);
+        this.selection = new Set([shape.id]);
+        this.commit();
+      }
+      this.setTool('select');
+    } else if(this.tool==='hole'){
+      const shape = Shapes.hole(snapped.x, snapped.y, this.activeLayerId());
+      this.project.shapes.push(shape);
+      this.selection = new Set([shape.id]);
+      this.commit();
+    }
+  }
+
+  onPointerMove(e){
+    if(this.pointers.has(e.pointerId)) this.pointers.set(e.pointerId, {x:e.clientX,y:e.clientY});
+    if(this.pointers.size===2 && this.pinch){ this.updatePinch(); return; }
+
+    const rect = this.canvas.getBoundingClientRect();
+    const sx=e.clientX-rect.left, sy=e.clientY-rect.top;
+    const world = this.screenToWorld(sx,sy);
+    document.getElementById('statPos').textContent = `X: ${Units.format(world.x,this.project.meta.unit)} / Y: ${Units.format(world.y,this.project.meta.unit)}`;
+
+    if(!this.drag) return;
+    const snapped = this.snapPoint(world.x, world.y);
+
+    switch(this.drag.mode){
+      case 'pan':{
+        this.camera.panX = this.drag.startPan.panX + (sx-this.drag.startScreen.x);
+        this.camera.panY = this.drag.startPan.panY + (sy-this.drag.startScreen.y);
+        this.render();
+        break;
+      }
+      case 'move':{
+        const dx = world.x-this.drag.start.x, dy=world.y-this.drag.start.y;
+        const dxs = this.snap ? this.snapDelta(dx) : dx;
+        const dys = this.snap ? this.snapDelta(dy) : dy;
+        this.drag.shapeIds.forEach((id,i)=>{
+          const orig=this.drag.origShapes[i];
+          const s=this.project.shapes.find(x=>x.id===id);
+          this.translateShape(s, orig, dxs, dys);
+        });
+        this.render(); this.renderProps();
+        break;
+      }
+      case 'rubberband':{
+        this.drag.current = world;
+        this.render();
+        this.drawRubberband(this.drag.startScreen, {x:sx,y:sy});
+        break;
+      }
+      case 'draw-line':
+        this.drag.previewShape = Shapes.line(this.drag.start.x,this.drag.start.y,snapped.x,snapped.y,this.activeLayerId());
+        this.render(); break;
+      case 'draw-rect':{
+        const x=Math.min(this.drag.start.x,snapped.x), y=Math.min(this.drag.start.y,snapped.y);
+        const w=Math.abs(snapped.x-this.drag.start.x), h=Math.abs(snapped.y-this.drag.start.y);
+        this.drag.previewShape = Shapes.rect(x,y,w,h,this.activeLayerId());
+        this.render(); break;
+      }
+      case 'draw-woodpart':{
+        const x=Math.min(this.drag.start.x,snapped.x), y=Math.min(this.drag.start.y,snapped.y);
+        const w=Math.abs(snapped.x-this.drag.start.x), h=Math.abs(snapped.y-this.drag.start.y);
+        this.drag.previewShape = Shapes.woodpart(x,y,w,h,this.activeLayerId());
+        this.render(); break;
+      }
+      case 'draw-circle':{
+        const r = Geo.dist(this.drag.start.x,this.drag.start.y,snapped.x,snapped.y);
+        this.drag.previewShape = Shapes.circle(this.drag.start.x,this.drag.start.y,r,this.activeLayerId());
+        this.render(); break;
+      }
+      case 'draw-halfcircle':{
+        const r = Geo.dist(this.drag.start.x,this.drag.start.y,snapped.x,snapped.y);
+        // Bogen wölbt sich in Zugrichtung; Drehung wird aus dem Zugwinkel abgeleitet
+        const rotation = Geo.angleDeg(this.drag.start.x,this.drag.start.y,snapped.x,snapped.y) - 90;
+        this.drag.previewShape = Shapes.halfcircle(this.drag.start.x,this.drag.start.y,Math.max(r,0.1),rotation,this.activeLayerId());
+        this.render(); break;
+      }
+      case 'draw-dimension':
+        this.drag.previewShape = Shapes.dimension(this.drag.start.x,this.drag.start.y,snapped.x,snapped.y,this.activeLayerId());
+        this.render(); break;
+    }
+  }
+
+  onPointerUp(e){
+    this.pointers.delete(e.pointerId);
+    if(this.pointers.size<2) this.pinch=null;
+    if(!this.drag) return;
+
+    const finishDraw = (shape, minSize=0.3)=>{
+      const b=this.getShapeBounds(shape);
+      if(b && b.w<minSize && b.h<minSize && shape.type!=='dimension'){ this.drag=null; this.render(); return false; }
+      this.project.shapes.push(shape);
+      this.selection = new Set([shape.id]);
+      return true;
+    };
+
+    switch(this.drag.mode){
+      case 'move': this.commit(); break;
+      case 'rubberband':{
+        if(this.drag.current){
+          const a=this.drag.start, b=this.drag.current;
+          const x1=Math.min(a.x,b.x), x2=Math.max(a.x,b.x), y1=Math.min(a.y,b.y), y2=Math.max(a.y,b.y);
+          for(const s of this.project.shapes){
+            const bb=this.getShapeBounds(s); if(!bb) continue;
+            if(bb.x>=x1 && bb.y>=y1 && bb.x+bb.w<=x2 && bb.y+bb.h<=y2) this.selection.add(s.id);
+          }
+        }
+        this.render(); this.renderProps();
+        break;
+      }
+      case 'draw-line': if(this.drag.previewShape && finishDraw(this.drag.previewShape, 0.05)) this.commit(); break;
+      case 'draw-rect': if(this.drag.previewShape && finishDraw(this.drag.previewShape)) this.commit(); break;
+      case 'draw-woodpart': if(this.drag.previewShape && finishDraw(this.drag.previewShape)) this.commit(); break;
+      case 'draw-circle': if(this.drag.previewShape && finishDraw(this.drag.previewShape,0.2)) this.commit(); break;
+      case 'draw-halfcircle': if(this.drag.previewShape && finishDraw(this.drag.previewShape,0.2)) this.commit(); break;
+      case 'draw-dimension': if(this.drag.previewShape){ this.project.shapes.push(this.drag.previewShape); this.selection=new Set([this.drag.previewShape.id]); this.commit(); } break;
+    }
+    this.drag=null;
+    if(this.tool!=='select' && this.tool!=='pan' && !['line','rect','circle','dimension','woodpart'].includes(this.tool)) {/* keep */}
+    this.render(); this.renderProps();
+  }
+
+  snapDelta(d){
+    const g = this.precision ? this.gridSpacingCm()/5 : this.gridSpacingCm();
+    return Math.round(d/g)*g;
+  }
+
+  translateShape(s, orig, dx, dy){
+    switch(s.type){
+      case 'line': s.x1=orig.x1+dx; s.y1=orig.y1+dy; s.x2=orig.x2+dx; s.y2=orig.y2+dy; break;
+      case 'rect': case 'woodpart': s.x=orig.x+dx; s.y=orig.y+dy; break;
+      case 'circle': s.cx=orig.cx+dx; s.cy=orig.cy+dy; break;
+      case 'halfcircle': s.cx=orig.cx+dx; s.cy=orig.cy+dy; break;
+      case 'hole': s.cx=orig.cx+dx; s.cy=orig.cy+dy; break;
+      case 'text': s.x=orig.x+dx; s.y=orig.y+dy; break;
+      case 'dimension': s.x1=orig.x1+dx; s.y1=orig.y1+dy; s.x2=orig.x2+dx; s.y2=orig.y2+dy; break;
+    }
+  }
+
+  drawRubberband(p1,p2){
+    const ctx=this.ctx;
+    ctx.save(); ctx.strokeStyle='#2563eb'; ctx.fillStyle='rgba(37,99,235,0.08)'; ctx.lineWidth=1;
+    const x=Math.min(p1.x,p2.x),y=Math.min(p1.y,p2.y),w=Math.abs(p2.x-p1.x),h=Math.abs(p2.y-p1.y);
+    ctx.fillRect(x,y,w,h); ctx.strokeRect(x,y,w,h); ctx.restore();
+  }
+
+  /* ---------- Pinch-Zoom (Touch) ---------- */
+  startPinch(){
+    const pts=[...this.pointers.values()];
+    const dist = Geo.dist(pts[0].x,pts[0].y,pts[1].x,pts[1].y);
+    const mid = {x:(pts[0].x+pts[1].x)/2, y:(pts[0].y+pts[1].y)/2};
+    this.pinch = {startDist:dist, startZoom:this.camera.zoom, startPan:{...this.camera}, startMid:mid};
+    this.drag=null;
+  }
+  updatePinch(){
+    const pts=[...this.pointers.values()];
+    const dist = Geo.dist(pts[0].x,pts[0].y,pts[1].x,pts[1].y);
+    const mid = {x:(pts[0].x+pts[1].x)/2, y:(pts[0].y+pts[1].y)/2};
+    const factor = dist / (this.pinch.startDist||1);
+    this.camera.zoom = Geo.clamp(this.pinch.startZoom*factor, 0.05, 40);
+    this.camera.panX = this.pinch.startPan.panX + (mid.x-this.pinch.startMid.x);
+    this.camera.panY = this.pinch.startPan.panY + (mid.y-this.pinch.startMid.y);
+    this.render();
+  }
+
+  /* ---------- Zoom (Maus/Scroll) ---------- */
+  onWheel(e){
+    e.preventDefault();
+    const rect=this.canvas.getBoundingClientRect();
+    const sx=e.clientX-rect.left, sy=e.clientY-rect.top;
+    const before = this.screenToWorld(sx,sy);
+    const factor = e.deltaY<0 ? 1.1 : 1/1.1;
+    this.camera.zoom = Geo.clamp(this.camera.zoom*factor, 0.05, 40);
+    const after = this.worldToScreen(before.x,before.y);
+    this.camera.panX += sx-after.x; this.camera.panY += sy-after.y;
+    this.render();
+  }
+  zoomBy(f){
+    const wrap=document.getElementById('canvasWrap');
+    const cx=wrap.clientWidth/2, cy=wrap.clientHeight/2;
+    const before=this.screenToWorld(cx,cy);
+    this.camera.zoom = Geo.clamp(this.camera.zoom*f, 0.05, 40);
+    const after=this.worldToScreen(before.x,before.y);
+    this.camera.panX += cx-after.x; this.camera.panY += cy-after.y;
+    this.render();
+  }
+  zoomToFit(){
+    if(this.project.shapes.length===0){ this.camera={panX:60,panY:60,zoom:1}; this.render(); return; }
+    let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+    for(const s of this.project.shapes){
+      const b=this.getShapeBounds(s); if(!b) continue;
+      minX=Math.min(minX,b.x); minY=Math.min(minY,b.y);
+      maxX=Math.max(maxX,b.x+b.w); maxY=Math.max(maxY,b.y+b.h);
+    }
+    const wrap=document.getElementById('canvasWrap');
+    const availW=wrap.clientWidth-80, availH=wrap.clientHeight-80;
+    const wCm=Math.max(10,maxX-minX), hCm=Math.max(10,maxY-minY);
+    const s = Math.min(availW/wCm, availH/hCm);
+    this.camera.zoom = Geo.clamp(s/(this.basePxPerCm/this.scaleDenominator), 0.02, 40);
+    const c=this.worldToScreen((minX+maxX)/2,(minY+maxY)/2);
+    this.camera.panX += wrap.clientWidth/2 - c.x;
+    this.camera.panY += wrap.clientHeight/2 - c.y;
+    this.render();
+  }
+
+  /* ---------- Tastatur ---------- */
+  onKeyDown(e){
+    if(document.activeElement && ['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)) return;
+    const ctrl=e.ctrlKey||e.metaKey;
+    if(ctrl && e.key.toLowerCase()==='z'){ e.preventDefault(); this.undo(); return; }
+    if(ctrl && e.key.toLowerCase()==='y'){ e.preventDefault(); this.redo(); return; }
+    if(ctrl && e.key.toLowerCase()==='c'){ e.preventDefault(); this.copySelection(); return; }
+    if(ctrl && e.key.toLowerCase()==='v'){ e.preventDefault(); this.pasteClipboard(); return; }
+    if(ctrl && e.key.toLowerCase()==='a'){ e.preventDefault(); this.selection=new Set(this.project.shapes.map(s=>s.id)); this.render(); this.renderProps(); return; }
+    if(ctrl && e.key.toLowerCase()==='s'){ e.preventDefault(); this.exportJSON(); return; }
+    if(e.key==='Delete' || e.key==='Backspace'){ this.deleteSelection(); return; }
+    const dirKeys={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]};
+    if(dirKeys[e.key] && this.selection.size){
+      e.preventDefault();
+      const step = this.snap? this.gridSpacingCm() : 0.1;
+      const [dx,dy]=dirKeys[e.key];
+      for(const id of this.selection){
+        const s=this.project.shapes.find(x=>x.id===id);
+        this.translateShape(s, s, dx*step, dy*step);
+      }
+      this.commit(); return;
+    }
+    const toolKeys={v:'select',h:'pan',l:'line',r:'rect',c:'circle',b:'halfcircle',d:'dimension',t:'text'};
+    if(toolKeys[e.key.toLowerCase()]) this.setTool(toolKeys[e.key.toLowerCase()]);
+  }
+
+  copySelection(){ this.clipboard = this.project.shapes.filter(s=>this.selection.has(s.id)).map(s=>JSON.parse(JSON.stringify(s))); }
+  pasteClipboard(){
+    if(!this.clipboard||!this.clipboard.length) return;
+    const newIds=[];
+    for(const s of this.clipboard){
+      const copy=JSON.parse(JSON.stringify(s)); copy.id=Geo.uid();
+      this.translateShape(copy, copy, 4, 4);
+      this.project.shapes.push(copy); newIds.push(copy.id);
+    }
+    this.selection=new Set(newIds);
+    this.commit();
+  }
+  deleteSelection(){
+    if(!this.selection.size) return;
+    this.project.shapes = this.project.shapes.filter(s=>!this.selection.has(s.id));
+    this.selection.clear();
+    this.commit();
+  }
+
+  /* ---------- Undo/Redo/Commit ---------- */
+  commit(){ this.history.snapshot(); this.markDirty(); this.render(); this.renderProps(); this.renderLayers(); this.renderParts(); }
+  undo(){ this.history.undo(); this.render(); this.renderProps(); this.renderLayers(); this.renderParts(); }
+  redo(){ this.history.redo(); this.render(); this.renderProps(); this.renderLayers(); this.renderParts(); }
+  afterProjectReplaced(){
+    document.getElementById('projName').value=this.project.meta.name;
+    document.getElementById('unitSelect').value=this.project.meta.unit;
+    const sel=document.getElementById('scaleSelect');
+    sel.value = [...sel.options].some(o=>o.value==String(this.project.meta.scale)) ? String(this.project.meta.scale) : 'custom';
+    this.selection.clear();
+  }
+
+  /* ---------- Eigenschaften-Panel ---------- */
+  renderProps(){
+    const panel=document.getElementById('panelProps');
+    if(this.selection.size===0){
+      panel.innerHTML='<div class="empty-hint">Kein Objekt ausgewählt.<br>Wähle ein Objekt auf der Zeichenfläche.</div>';
+      return;
+    }
+    if(this.selection.size>1){
+      panel.innerHTML=`<div class="empty-hint">${this.selection.size} Objekte ausgewählt.</div>
+        <div class="btn-row"><button class="btn small" id="pAlignLeft">Links</button><button class="btn small" id="pAlignRight">Rechts</button>
+        <button class="btn small" id="pAlignTop">Oben</button><button class="btn small" id="pAlignBottom">Unten</button>
+        <button class="btn small" id="pAlignCX">H-Zentr.</button><button class="btn small" id="pAlignCY">V-Zentr.</button></div>`;
+      const align=(fn)=>{
+        const shapes=this.project.shapes.filter(s=>this.selection.has(s.id));
+        const boxes=shapes.map(s=>({s,b:this.getShapeBounds(s)}));
+        fn(boxes); this.commit();
+      };
+      document.getElementById('pAlignLeft').onclick=()=>align(bs=>{const minx=Math.min(...bs.map(o=>o.b.x)); bs.forEach(o=>this.translateShape(o.s,o.s,minx-o.b.x,0));});
+      document.getElementById('pAlignRight').onclick=()=>align(bs=>{const maxx=Math.max(...bs.map(o=>o.b.x+o.b.w)); bs.forEach(o=>this.translateShape(o.s,o.s,(maxx-o.b.w)-o.b.x,0));});
+      document.getElementById('pAlignTop').onclick=()=>align(bs=>{const miny=Math.min(...bs.map(o=>o.b.y)); bs.forEach(o=>this.translateShape(o.s,o.s,0,miny-o.b.y));});
+      document.getElementById('pAlignBottom').onclick=()=>align(bs=>{const maxy=Math.max(...bs.map(o=>o.b.y+o.b.h)); bs.forEach(o=>this.translateShape(o.s,o.s,0,(maxy-o.b.h)-o.b.y));});
+      document.getElementById('pAlignCX').onclick=()=>align(bs=>{const cxs=bs.map(o=>o.b.x+o.b.w/2); const c=(Math.min(...cxs)+Math.max(...cxs))/2; bs.forEach(o=>this.translateShape(o.s,o.s,c-(o.b.x+o.b.w/2),0));});
+      document.getElementById('pAlignCY').onclick=()=>align(bs=>{const cys=bs.map(o=>o.b.y+o.b.h/2); const c=(Math.min(...cys)+Math.max(...cys))/2; bs.forEach(o=>this.translateShape(o.s,o.s,0,c-(o.b.y+o.b.h/2)));});
+      return;
+    }
+    const shape = this.project.shapes.find(s=>this.selection.has(s.id));
+    if(!shape){ panel.innerHTML='<div class="empty-hint">Objekt nicht mehr vorhanden.</div>'; return; }
+    const unit=this.project.meta.unit;
+    let html = `<h4>Typ</h4><div class="field-row"><label>Objekttyp</label><span>${labelForType(shape.type)}</span></div>`;
+    html += `<h4>Ebene</h4><div class="field-row"><label>Ebene</label><select data-field="layer">${this.project.layers.map(l=>`<option value="${l.id}" ${l.id===shape.layer?'selected':''}>${l.name}</option>`).join('')}</select></div>`;
+
+    const numField=(label,field,val,step=0.1)=>`<div class="field-row"><label>${label}</label><input type="number" step="${step}" data-field="${field}" value="${Units.round2(Units.fromCm(val,unit),2)}"></div>`;
+    const rawField=(label,field,val,step)=>`<div class="field-row"><label>${label}</label><input type="number" step="${step||1}" data-field="${field}" data-raw="1" value="${val}"></div>`;
+    const textField=(label,field,val)=>`<div class="field-row"><label>${label}</label><input type="text" data-field="${field}" value="${val||''}"></div>`;
+
+    html += `<h4>Geometrie (${unit})</h4>`;
+    switch(shape.type){
+      case 'line':
+        html+=numField('X1',['x1'],shape.x1)+numField('Y1',['y1'],shape.y1)+numField('X2',['x2'],shape.x2)+numField('Y2',['y2'],shape.y2);
+        html+=`<div class="field-row"><label>Länge</label><span>${Units.format(Geo.dist(shape.x1,shape.y1,shape.x2,shape.y2),unit,1)}</span></div>`;
+        html+=`<div class="field-row"><label>Winkel</label><span>${Geo.round(Geo.angleDeg(shape.x1,shape.y1,shape.x2,shape.y2),1)}°</span></div>`;
+        break;
+      case 'rect': case 'woodpart':
+        html+=numField('X',['x'],shape.x)+numField('Y',['y'],shape.y)+numField('Breite',['w'],shape.w)+numField('Höhe',['h'],shape.h);
+        if(shape.type==='woodpart'){
+          html+=`<h4>Bauteil</h4>`+textField('Bezeichnung','bezeichnung',shape.bezeichnung)+textField('Material','material',shape.material)
+              + rawField('Anzahl','anzahl',shape.anzahl,1) + numField('Stärke','staerke_cm_dummy',shape.staerke||2.8,0.1);
+        }
+        break;
+      case 'circle':
+        html+=numField('Mitte X',['cx'],shape.cx)+numField('Mitte Y',['cy'],shape.cy)+numField('Radius',['r'],shape.r);
+        break;
+      case 'halfcircle':
+        html+=numField('Mitte X',['cx'],shape.cx)+numField('Mitte Y',['cy'],shape.cy)+numField('Radius',['r'],shape.r)
+            +rawField('Drehung °','rotation',shape.rotation||0,1);
+        break;
+      case 'hole':
+        html+=numField('Mitte X',['cx'],shape.cx)+numField('Mitte Y',['cy'],shape.cy)+numField('Durchmesser',['durchmesser'],shape.durchmesser)
+            +`<div class="field-row"><label>Art</label><select data-field="art"><option ${shape.art==='Durchgangsloch'?'selected':''}>Durchgangsloch</option><option ${shape.art==='Sackloch'?'selected':''}>Sackloch</option><option ${shape.art==='Senkkopf'?'selected':''}>Senkkopf</option></select></div>`;
+        break;
+      case 'text':
+        html+=numField('X',['x'],shape.x)+numField('Y',['y'],shape.y)+textField('Text','text',shape.text)
+            +rawField('Größe','size',shape.size,0.1)+rawField('Drehung °','rotation',shape.rotation||0,1)
+            +`<div class="field-row"><label>Fett</label><input type="checkbox" data-field="bold" data-bool="1" ${shape.bold?'checked':''}></div>`
+            +`<div class="field-row"><label>Kursiv</label><input type="checkbox" data-field="italic" data-bool="1" ${shape.italic?'checked':''}></div>`;
+        break;
+      case 'dimension':
+        html+=numField('X1',['x1'],shape.x1)+numField('Y1',['y1'],shape.y1)+numField('X2',['x2'],shape.x2)+numField('Y2',['y2'],shape.y2)
+            +numField('Versatz',['offset'],shape.offset)+textField('Text (leer=automatisch)','customText',shape.customText);
+        break;
+    }
+    html += `<div class="btn-row"><button class="btn small" id="pDup">Duplizieren</button><button class="btn small" id="pDel">Löschen</button></div>`;
+    panel.innerHTML = html;
+
+    panel.querySelectorAll('input,select').forEach(inp=>{
+      const evt = inp.tagName==='SELECT' ? 'change' : 'input';
+      inp.addEventListener(evt, ()=>{
+        const field = inp.dataset.field;
+        if(field==='layer'){ shape.layer=inp.value; }
+        else if(inp.dataset.bool){ shape[field]=inp.checked; }
+        else if(inp.type==='number'){
+          let v=parseFloat(inp.value); if(isNaN(v)) v=0;
+          if(field==='staerke_cm_dummy'){ shape.staerke = v; }
+          else if(inp.dataset.raw){ shape[field]=v; } // reine Zahl (Winkel, Anzahl, Größe) – keine Einheiten-Umrechnung
+          else shape[field]=Units.toCm(v,unit);
+        } else shape[field]=inp.value;
+        this.render();
+      });
+      inp.addEventListener('change', ()=>this.commit());
+    });
+    const dup=document.getElementById('pDup'); if(dup) dup.onclick=()=>{ this.copySelection(); this.pasteClipboard(); };
+    const del=document.getElementById('pDel'); if(del) del.onclick=()=>this.deleteSelection();
+  }
+
+  /* ---------- Ebenen-Panel ---------- */
+  renderLayers(){
+    const panel=document.getElementById('panelLayers');
+    let html = '<h4>Ebenen</h4>';
+    for(const l of this.project.layers){
+      html += `<div class="layer-row" data-id="${l.id}">
+        <button class="icon-btn" data-act="vis">${l.visible!==false?'👁':'🚫'}</button>
+        <button class="icon-btn" data-act="lock">${l.locked?'🔒':'🔓'}</button>
+        <input type="text" value="${l.name}" data-act="rename">
+        <button class="icon-btn" data-act="active" title="Als aktive Ebene wählen">${this.activeLayerId()===l.id?'●':'○'}</button>
+        <button class="icon-btn" data-act="del" title="Ebene löschen">✕</button>
+      </div>`;
+    }
+    html += `<div class="btn-row"><button class="btn small" id="addLayer">+ Ebene</button></div>`;
+    panel.innerHTML = html;
+    panel.querySelectorAll('.layer-row').forEach(row=>{
+      const id = row.dataset.id;
+      const layer = this.project.layers.find(l=>l.id===id);
+      row.querySelector('[data-act="vis"]').onclick=()=>{ layer.visible = layer.visible===false ? true : false; this.commit(); this.renderLayers(); };
+      row.querySelector('[data-act="lock"]').onclick=()=>{ layer.locked=!layer.locked; this.commit(); this.renderLayers(); };
+      row.querySelector('[data-act="rename"]').addEventListener('change', e=>{ layer.name=e.target.value; this.commit(); });
+      row.querySelector('[data-act="active"]').onclick=()=>{ this.currentLayerId=id; this.renderLayers(); };
+      row.querySelector('[data-act="del"]').onclick=()=>{
+        if(this.project.layers.length<=1){ alert('Es muss mindestens eine Ebene vorhanden sein.'); return; }
+        if(!confirm(`Ebene "${layer.name}" inkl. Inhalten löschen?`)) return;
+        this.project.shapes = this.project.shapes.filter(s=>s.layer!==id);
+        this.project.layers = this.project.layers.filter(l=>l.id!==id);
+        this.commit(); this.renderLayers();
+      };
+    });
+    document.getElementById('addLayer').onclick=()=>{
+      const name = prompt('Name der neuen Ebene:', 'Neue Ebene'); if(!name) return;
+      this.project.layers.push({id:Geo.uid(),name,visible:true,locked:false});
+      this.commit(); this.renderLayers();
+    };
+  }
+
+  /* ---------- Stückliste ---------- */
+  renderParts(){
+    const panel=document.getElementById('panelParts');
+    const parts = this.project.shapes.filter(s=>s.type==='woodpart');
+    if(!parts.length){ panel.innerHTML='<div class="empty-hint">Noch keine Holzbauteile vorhanden.<br>Nutze das Werkzeug „Holzteil“.</div>'; return; }
+    const unit = this.project.meta.unit;
+    let html = `<h4>Stückliste</h4><table class="parts-table"><tr><th>Pos.</th><th>Bauteil</th><th>Material</th><th>Länge</th><th>Breite</th><th>Stärke</th><th>Anz.</th></tr>`;
+    parts.forEach((p,i)=>{
+      html += `<tr><td>${i+1}</td><td>${escapeHtml(p.bezeichnung)}</td><td>${escapeHtml(p.material)}</td>
+        <td>${Units.format(p.w,unit,1)}</td><td>${Units.format(p.h,unit,1)}</td><td>${Units.round2(p.staerke||0,1)} cm</td><td>${p.anzahl}</td></tr>`;
+    });
+    html += `</table><h4>Zuschnittliste</h4><div class="empty-hint">Zusammenfassung gleicher Zuschnitte:</div>`;
+    const grouped = {};
+    parts.forEach(p=>{
+      const key = `${p.bezeichnung}|${p.material}|${Units.round2(p.w,1)}x${Units.round2(p.h,1)}x${p.staerke}`;
+      grouped[key] = grouped[key] || {...p, count:0};
+      grouped[key].count += (p.anzahl||1);
+    });
+    html += `<table class="parts-table"><tr><th>Bauteil</th><th>Maße (L×B×S, cm)</th><th>Material</th><th>Menge</th></tr>`;
+    Object.values(grouped).forEach(g=>{
+      html += `<tr><td>${escapeHtml(g.bezeichnung)}</td><td>${Units.round2(g.w,1)}×${Units.round2(g.h,1)}×${g.staerke}</td><td>${escapeHtml(g.material)}</td><td>${g.count}</td></tr>`;
+    });
+    html += `</table><div class="btn-row"><button class="btn small" id="exportPartsCsv">Als CSV exportieren</button></div>`;
+    panel.innerHTML = html;
+    document.getElementById('exportPartsCsv').onclick=()=>this.exportPartsCsv(parts);
+  }
+  exportPartsCsv(parts){
+    const unit=this.project.meta.unit;
+    let csv = 'Pos.;Bauteil;Material;Laenge;Breite;Staerke_cm;Anzahl\n';
+    parts.forEach((p,i)=>{ csv += `${i+1};${p.bezeichnung};${p.material};${Units.round2(Units.fromCm(p.w,unit),1)} ${unit};${Units.round2(Units.fromCm(p.h,unit),1)} ${unit};${p.staerke};${p.anzahl}\n`; });
+    downloadText(csv, (this.project.meta.name||'projekt')+'_stueckliste.csv', 'text/csv');
+  }
+
+  /* ---------- Projekt-Info-Panel ---------- */
+  renderInfo(){
+    const panel=document.getElementById('panelInfo'); const m=this.project.meta;
+    panel.innerHTML = `<h4>Projektinformationen</h4>
+      <div class="field-row"><label>Name</label><input type="text" id="infoName" value="${escapeHtml(m.name)}"></div>
+      <div class="field-row"><label>Autor</label><input type="text" id="infoAuthor" value="${escapeHtml(m.author||'')}"></div>
+      <div class="field-row"><label>Version</label><input type="text" id="infoVersion" value="${escapeHtml(m.version||'')}"></div>
+      <div class="field-row"><label>Datum</label><input type="date" id="infoDate" value="${m.date}"></div>
+      <div class="field-row"><label style="flex:0 0 auto;">Beschreibung</label></div>
+      <textarea id="infoDesc" style="width:100%;min-height:50px;font-size:12px;padding:6px;border:1px solid var(--border);border-radius:5px;">${escapeHtml(m.description||'')}</textarea>
+      <div class="field-row" style="margin-top:8px;"><label style="flex:0 0 auto;">Notizen</label></div>
+      <textarea id="infoNotes" style="width:100%;min-height:50px;font-size:12px;padding:6px;border:1px solid var(--border);border-radius:5px;">${escapeHtml(m.notes||'')}</textarea>
+      <div class="btn-row"><button class="btn primary small" id="infoSave">Übernehmen</button></div>`;
+    document.getElementById('infoSave').onclick=()=>{
+      m.name=document.getElementById('infoName').value; document.getElementById('projName').value=m.name;
+      m.author=document.getElementById('infoAuthor').value; m.version=document.getElementById('infoVersion').value;
+      m.date=document.getElementById('infoDate').value; m.description=document.getElementById('infoDesc').value;
+      m.notes=document.getElementById('infoNotes').value; this.commit();
+    };
+  }
+
+  /* ---------- Menü-Aktionen ---------- */
+  handleMenuAction(action){
+    switch(action){
+      case 'new': this.createNewProjectFromGallery(); break;
+      case 'save-json': this.exportJSON(); break;
+      case 'load-json': document.getElementById('fileInput').click(); break;
+      case 'export-png': this.exportPNG(); break;
+      case 'export-pdf': this.exportPDF(); break;
+      case 'undo': this.undo(); break;
+      case 'redo': this.redo(); break;
+      case 'copy': this.copySelection(); break;
+      case 'paste': this.pasteClipboard(); break;
+      case 'delete': this.deleteSelection(); break;
+      case 'selectall': this.selection=new Set(this.project.shapes.map(s=>s.id)); this.render(); this.renderProps(); break;
+      case 'zoom-fit': this.zoomToFit(); break;
+      case 'zoom-100': this.camera.zoom=1; this.render(); break;
+      case 'zoom-selection':{
+        if(!this.selection.size) break;
+        const shapes=this.project.shapes.filter(s=>this.selection.has(s.id));
+        let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+        shapes.forEach(s=>{ const b=this.getShapeBounds(s); if(!b)return; minX=Math.min(minX,b.x);minY=Math.min(minY,b.y);maxX=Math.max(maxX,b.x+b.w);maxY=Math.max(maxY,b.y+b.h); });
+        const wrap=document.getElementById('canvasWrap');
+        const s=Math.min((wrap.clientWidth-100)/Math.max(5,maxX-minX), (wrap.clientHeight-100)/Math.max(5,maxY-minY));
+        this.camera.zoom=Geo.clamp(s/(this.basePxPerCm/this.scaleDenominator),0.02,40);
+        const c=this.worldToScreen((minX+maxX)/2,(minY+maxY)/2);
+        this.camera.panX += wrap.clientWidth/2-c.x; this.camera.panY += wrap.clientHeight/2-c.y;
+        this.render();
+        break;
+      }
+      case 'toggle-grid': this.showGrid=!this.showGrid; document.getElementById('chkGrid').checked=this.showGrid; this.render(); break;
+      case 'toggle-snap': this.snap=!this.snap; document.getElementById('chkSnap').checked=this.snap; this.updateStatus(); break;
+      case 'insert-rect-exact': this.openRectExactModal(); break;
+      case 'insert-woodpart': this.openWoodpartModal(); break;
+      case 'wizard-open': this.openWizard(); break;
+      case 'demo-load': if(confirm('Aktuelles Projekt ersetzen und Hochbeet-Beispiel laden?')) this.loadDemoProject(true); break;
+      case 'help':
+        alert('Kurzanleitung:\n\n• Werkzeuge links wählen, auf der Fläche zeichnen.\n• Auswahl-Werkzeug: Objekte anklicken/verschieben, Eigenschaften rechts bearbeiten.\n• Mausrad = Zoom, mittlere Maustaste/rechte Maustaste ziehen = Verschieben, am Touch: 2 Finger = Zoom/Pan.\n• Maße stets in der eingestellten Einheit, Maßlinien aktualisieren sich automatisch.\n• Datei-Menü: Speichern/Laden als JSON, Export als PNG/PDF.');
+        break;
+    }
+  }
+
+  /* ---------- Exakte Rechteck / Holzteil Erzeugung über Modal ---------- */
+  openRectExactModal(){
+    const unit=this.project.meta.unit;
+    this.showGenericModal('Rechteck (exakte Maße)', `
+      <div class="field-row"><label>Breite (${unit})</label><input type="number" id="gW" value="100"></div>
+      <div class="field-row"><label>Höhe (${unit})</label><input type="number" id="gH" value="50"></div>
+      <div class="field-row"><label>X (${unit})</label><input type="number" id="gX" value="0"></div>
+      <div class="field-row"><label>Y (${unit})</label><input type="number" id="gY" value="0"></div>
+    `, ()=>{
+      const w=Units.toCm(parseFloat(gv('gW'))||0,unit), h=Units.toCm(parseFloat(gv('gH'))||0,unit);
+      const x=Units.toCm(parseFloat(gv('gX'))||0,unit), y=Units.toCm(parseFloat(gv('gY'))||0,unit);
+      const shape=Shapes.rect(x,y,w,h,this.activeLayerId());
+      this.project.shapes.push(shape); this.selection=new Set([shape.id]); this.commit(); this.zoomToFitIfEmpty();
+    });
+  }
+  openWoodpartModal(){
+    const unit=this.project.meta.unit;
+    this.showGenericModal('Holzbauteil einfügen', `
+      <div class="field-row"><label>Bezeichnung</label><input type="text" id="gName" value="Brett"></div>
+      <div class="field-row"><label>Material</label><input type="text" id="gMat" value="Fichte"></div>
+      <div class="field-row"><label>Länge (${unit})</label><input type="number" id="gL" value="100"></div>
+      <div class="field-row"><label>Breite (${unit})</label><input type="number" id="gB" value="10"></div>
+      <div class="field-row"><label>Stärke (cm)</label><input type="number" id="gS" value="2.8"></div>
+      <div class="field-row"><label>Anzahl</label><input type="number" id="gAnz" value="1"></div>
+    `, ()=>{
+      const l=Units.toCm(parseFloat(gv('gL'))||0,unit), b=Units.toCm(parseFloat(gv('gB'))||0,unit);
+      const shape=Shapes.woodpart(0,0,l,b,this.activeLayerId(),{bezeichnung:gv('gName'),material:gv('gMat'),staerke:parseFloat(gv('gS'))||2.8,anzahl:parseInt(gv('gAnz'))||1, laenge:l, breite:b});
+      this.project.shapes.push(shape); this.selection=new Set([shape.id]); this.commit(); this.zoomToFitIfEmpty();
+    });
+  }
+  zoomToFitIfEmpty(){ if(this.project.shapes.length<=3) this.zoomToFit(); }
+
+  showGenericModal(title, bodyHtml, onOk, okLabel){
+    document.getElementById('genericTitle').textContent=title;
+    document.getElementById('genericBody').innerHTML=bodyHtml;
+    document.getElementById('genericOverlay').classList.add('show');
+    const okBtn=document.getElementById('genericOk');
+    okBtn.textContent = okLabel || 'Erstellen';
+    okBtn.onclick=()=>{ onOk(); this.closeGenericModal(); };
+  }
+  closeGenericModal(){ document.getElementById('genericOverlay').classList.remove('show'); }
+
+  /* Eigenes Bestätigungs-Modal (ersetzt window.confirm, das in eingebetteten Vorschauen blockiert werden kann) */
+  showConfirm(message, onOk, opts={}){
+    document.getElementById('confirmTitle').textContent = opts.title || 'Bitte bestätigen';
+    document.getElementById('confirmMessage').textContent = message;
+    const okBtn = document.getElementById('confirmOkBtn');
+    const cancelBtn = document.getElementById('confirmCancelBtn');
+    okBtn.textContent = opts.okLabel || 'Löschen';
+    okBtn.style.background = opts.danger===false ? 'var(--accent)' : 'var(--danger)';
+    okBtn.style.borderColor = opts.danger===false ? 'var(--accent)' : 'var(--danger)';
+    document.getElementById('confirmOverlay').classList.add('show');
+    const cleanup=()=>{ document.getElementById('confirmOverlay').classList.remove('show'); okBtn.onclick=null; cancelBtn.onclick=null; };
+    okBtn.onclick=()=>{ cleanup(); onOk(); };
+    cancelBtn.onclick=()=>{ cleanup(); /* Abbrechen: es passiert bewusst nichts */ };
+  }
+
+  /* ---------- Hochbeet-Assistent ---------- */
+  bindWizard(){
+    this.wizardStep=1;
+    this.wizardData={laenge:200,breite:100,hoehe:80,brettstaerke:2.8,pfosten:7,material:'Fichte'};
+    document.getElementById('wizardNext').addEventListener('click', ()=>this.wizardGoNext());
+    document.getElementById('wizardBack').addEventListener('click', ()=>this.wizardGoBack());
+  }
+  openWizard(){ this.wizardStep=1; this.renderWizardStep(); document.getElementById('wizardOverlay').classList.add('show'); }
+  closeWizard(){ document.getElementById('wizardOverlay').classList.remove('show'); }
+  renderWizardStep(){
+    const body=document.getElementById('wizardBody'); const d=this.wizardData;
+    ['wstep1','wstep2','wstep3'].forEach((id,i)=>document.getElementById(id).classList.toggle('done', i<this.wizardStep));
+    if(this.wizardStep===1){
+      body.innerHTML=`<h4>1. Abmessungen</h4>
+        <div class="field-row"><label>Länge (cm)</label><input type="number" id="wL" value="${d.laenge}"></div>
+        <div class="field-row"><label>Breite (cm)</label><input type="number" id="wB" value="${d.breite}"></div>
+        <div class="field-row"><label>Höhe (cm)</label><input type="number" id="wH" value="${d.hoehe}"></div>`;
+      document.getElementById('wizardBack').style.visibility='hidden';
+      document.getElementById('wizardNext').textContent='Weiter';
+    } else if(this.wizardStep===2){
+      body.innerHTML=`<h4>2. Material & Brettstärke</h4>
+        <div class="field-row"><label>Material</label>
+          <select id="wMat"><option ${d.material==='Fichte'?'selected':''}>Fichte</option><option ${d.material==='Kiefer'?'selected':''}>Kiefer</option>
+          <option ${d.material==='Douglasie'?'selected':''}>Douglasie</option><option ${d.material==='Lärche'?'selected':''}>Lärche</option>
+          <option ${d.material==='Eiche'?'selected':''}>Eiche</option></select></div>
+        <div class="field-row"><label>Brettstärke (cm)</label><input type="number" step="0.1" id="wBs" value="${d.brettstaerke}"></div>`;
+      document.getElementById('wizardBack').style.visibility='visible';
+      document.getElementById('wizardNext').textContent='Weiter';
+    } else if(this.wizardStep===3){
+      body.innerHTML=`<h4>3. Pfosten & Erstellen</h4>
+        <div class="field-row"><label>Pfosten (mm, quadr.)</label><input type="number" id="wPf" value="${d.pfosten*10}"></div>
+        <p class="sub">Es werden Vorderansicht, Seitenansicht, Draufsicht mit Bemaßung sowie eine Stückliste automatisch erzeugt.</p>`;
+      document.getElementById('wizardNext').textContent='Erstellen';
+    }
+  }
+  wizardGoBack(){ if(this.wizardStep>1){ this.wizardStep--; this.renderWizardStep(); } }
+  wizardGoNext(){
+    const d=this.wizardData;
+    if(this.wizardStep===1){
+      d.laenge=parseFloat(gv('wL'))||200; d.breite=parseFloat(gv('wB'))||100; d.hoehe=parseFloat(gv('wH'))||80;
+      this.wizardStep=2; this.renderWizardStep();
+    } else if(this.wizardStep===2){
+      d.material=gv('wMat'); d.brettstaerke=parseFloat(gv('wBs'))||2.8;
+      this.wizardStep=3; this.renderWizardStep();
+    } else {
+      d.pfosten=(parseFloat(gv('wPf'))||70)/10;
+      this.closeWizard();
+      this.buildHochbeet(d, true);
+    }
+  }
+
+  /* ---------- Hochbeet-Konstruktion (parametrisch) ---------- */
+  buildHochbeet(d, replace){
+    if(replace) this.project.shapes = [];
+    const L=this.activeAssignLayers();
+    const {laenge:L_,breite:B,hoehe:H,brettstaerke:t,pfosten:pf,material:mat} = d;
+
+    const addRectView = (originX, originY, w, h, label)=>{
+      // Außenkontur
+      this.project.shapes.push(Shapes.rect(originX,originY,w,h,L.konstruktion));
+      // Brettlagen andeuten (horizontale Linien passend zur Brettstärke, max 12 Linien zur Übersicht)
+      const rows = Math.min(Math.floor(h/t), 14);
+      for(let i=1;i<rows;i++){
+        const y=originY+i*t;
+        this.project.shapes.push(Shapes.line(originX,y,originX+w,y,L.holz));
+      }
+      // Pfosten links/rechts andeuten
+      this.project.shapes.push(Shapes.woodpart(originX, originY, pf, h, L.holz, {bezeichnung:'Pfosten', material:mat, staerke:pf, laenge:h, breite:pf, anzahl:1}));
+      this.project.shapes.push(Shapes.woodpart(originX+w-pf, originY, pf, h, L.holz, {bezeichnung:'Pfosten', material:mat, staerke:pf, laenge:h, breite:pf, anzahl:1}));
+      // Bemaßung außen: Breite unten, Höhe rechts
+      this.project.shapes.push(Shapes.dimension(originX, originY+h, originX+w, originY+h, L.bemassung, 10));
+      this.project.shapes.push(Shapes.dimension(originX+w, originY, originX+w, originY+h, L.bemassung, 10));
+      // Titel
+      this.project.shapes.push(Shapes.text(originX, originY-9, label, L.text));
+      return {originX,originY,w,h};
+    };
+
+    // Vorderansicht (Länge x Höhe)
+    const front = addRectView(0, 20, L_, H, 'Vorderansicht');
+    // Seitenansicht (Breite x Höhe), rechts daneben
+    const gap = Math.max(30, H*0.4);
+    const side = addRectView(front.originX+front.w+gap, 20, B, H, 'Seitenansicht');
+    // Draufsicht (Länge x Breite), darunter
+    const top = addRectView(0, front.originY+front.h+40, L_, B, 'Draufsicht');
+
+    // Beschriftung / Legende
+    this.project.shapes.push(Shapes.text(0, -22, `Bauplan: Holz-Hochbeet  |  ${L_}×${B}×${H} cm  |  Material: ${mat}, Brettstärke ${t} cm`, L.text));
+    this.project.shapes.push(Shapes.text(0, top.originY+top.h+18, `Legende: Rahmen = Außenkontur | horizontale Linien = Brettlagen (${t} cm) | Randstreifen = Pfosten ${pf}×${pf} cm`, L.text));
+
+    // Holzbauteile für Stückliste: Seitenbretter, Kopfbretter, Boden (vereinfachte, reale Materialliste)
+    const rows = Math.max(1, Math.round(H/t));
+    this.project.shapes.push(Shapes.text(-400,-9,'Bauteile (siehe Stückliste-Panel):', L.text));
+    this.project.shapes.push(Shapes.woodpart(-400,0, L_, t, L.holz, {bezeichnung:'Seitenbrett lang', material:mat, staerke:t, laenge:L_, breite:t, anzahl:rows*2}));
+    this.project.shapes.push(Shapes.woodpart(-400,20, B, t, L.holz, {bezeichnung:'Kopfbrett kurz', material:mat, staerke:t, laenge:B, breite:t, anzahl:rows*2}));
+    this.project.shapes.push(Shapes.woodpart(-400,40, H, pf, L.holz, {bezeichnung:'Eckpfosten', material:mat, staerke:pf, laenge:H, breite:pf, anzahl:4}));
+
+    // Warnung-Check (Beispiel: Brettstärke plausibel?)
+    if(t<=0 || t>H){ alert('Hinweis: Die Brettstärke erscheint im Verhältnis zur Höhe ungewöhnlich – bitte Maße prüfen.'); }
+
+    this.project.meta.name = 'Holz-Hochbeet ' + L_+'x'+B+'x'+H;
+    document.getElementById('projName').value=this.project.meta.name;
+    this.selection.clear();
+    this.commit();
+    this.zoomToFit();
+  }
+  activeAssignLayers(){
+    const find=(name)=> this.project.layers.find(l=>l.name===name)?.id || this.project.layers[0].id;
+    return { konstruktion:find('Konstruktion'), holz:find('Holz'), bemassung:find('Bemaßung'), text:find('Text') };
+  }
+
+  /* ---------- Demo-Projekt ---------- */
+  loadDemoProject(replace){
+    if(replace===undefined) replace=true;
+    this.project = newProject();
+    this.project.meta.scale = 10;
+    this.buildHochbeet({laenge:200,breite:100,hoehe:80,brettstaerke:2.8,pfosten:7,material:'Fichte'}, true);
+    this.afterProjectReplaced();
+  }
+
+  /* ---------- Speichern / Laden / Export ---------- */
+  markDirty(){ this.dirty=true; document.getElementById('statSaved').textContent='Nicht gespeichert…'; }
+  autosaveLoop(){
+    setInterval(()=>{
+      if(this.dirty){
+        this.persistActiveProject();
+        document.getElementById('statSaved').textContent='Automatisch gespeichert';
+        this.dirty=false;
+      }
+    }, 2000);
+  }
+
+  /* ---------- Sammelplatz: Mehrprojekt-Speicherung ---------- */
+  loadStore(){ try{ return JSON.parse(SafeStorage.get(STORE_KEY)||'{}'); }catch(e){ return {}; } }
+  saveStore(store){ try{ return SafeStorage.set(STORE_KEY, JSON.stringify(store)); }catch(e){ return false; } }
+
+  initProjectStorage(){
+    const store = this.loadStore();
+    const activeId = SafeStorage.get(ACTIVE_KEY);
+    // Fall 1: aktives Projekt existiert bereits im Sammelplatz-Speicher (und ist nicht gelöscht)
+    if(activeId && store[activeId] && !store[activeId].deleted){
+      this.projectId = activeId;
+      this.project = JSON.parse(JSON.stringify(store[activeId].project));
+      this.afterProjectReplaced();
+      return;
+    }
+    // Fall 2: Migration eines älteren Einzelprojekt-Speicherstands
+    try{
+      const legacy = SafeStorage.get('bauplan_autosave');
+      if(legacy){
+        const proj = JSON.parse(legacy);
+        const id = Geo.uid();
+        store[id] = { id, name: proj.meta?.name || 'Projekt', updatedAt: Date.now(), project: proj, thumb: null };
+        this.saveStore(store);
+        this.projectId = id;
+        this.project = proj;
+        SafeStorage.set(ACTIVE_KEY, id);
+        this.afterProjectReplaced();
+        return;
+      }
+    }catch(e){ /* Migration ignorieren, falls fehlerhaft */ }
+    // Fall 3: es gibt bereits Baupläne im Sammelplatz, aber keine aktive Auswahl -> neuesten (nicht gelöschten) öffnen
+    const ids = Object.keys(store).filter(id=>!store[id].deleted);
+    if(ids.length){
+      ids.sort((a,b)=>(store[b].updatedAt||0)-(store[a].updatedAt||0));
+      this.projectId = ids[0];
+      this.project = JSON.parse(JSON.stringify(store[this.projectId].project));
+      SafeStorage.set(ACTIVE_KEY, this.projectId);
+      this.afterProjectReplaced();
+      return;
+    }
+    // Fall 4: völlig leerer Sammelplatz -> Demo-Hochbeet als erstes Projekt anlegen
+    this.projectId = Geo.uid();
+    SafeStorage.set(ACTIVE_KEY, this.projectId);
+    this.loadDemoProject(true);
+  }
+
+  captureThumbnail(){
+    try{
+      const off=document.createElement('canvas'); off.width=240; off.height=160;
+      const octx=off.getContext('2d');
+      octx.fillStyle='#ffffff'; octx.fillRect(0,0,240,160);
+      octx.drawImage(this.canvas, 0,0, this.canvas.clientWidth||240, this.canvas.clientHeight||160, 0,0,240,160);
+      return off.toDataURL('image/jpeg',0.55);
+    }catch(e){ return null; }
+  }
+
+  persistActiveProject(captureThumb=true){
+    if(!this.projectId) return;
+    const store = this.loadStore();
+    const existing = store[this.projectId] || {};
+    store[this.projectId] = Object.assign({}, existing, {
+      id: this.projectId,
+      name: this.project.meta.name || 'Projekt',
+      updatedAt: Date.now(),
+      project: this.project,
+      thumb: captureThumb ? this.captureThumbnail() : (existing.thumb || null)
+    });
+    this.saveStore(store);
+    SafeStorage.set(ACTIVE_KEY, this.projectId);
+  }
+
+  openGallery(){
+    this.persistActiveProject();
+    this.galleryView = 'active';
+    this.renderGalleryGrid();
+    document.getElementById('galleryOverlay').classList.add('show');
+  }
+  closeGallery(){ document.getElementById('galleryOverlay').classList.remove('show'); }
+
+  setGalleryView(view){
+    this.galleryView = view;
+    document.getElementById('galleryTabActive').classList.toggle('active', view==='active');
+    document.getElementById('galleryTabTrash').classList.toggle('active', view==='trash');
+    this.renderGalleryGrid();
+  }
+
+  renderGalleryGrid(){
+    const store = this.loadStore();
+    const grid = document.getElementById('galleryGrid');
+    const allIds = Object.keys(store);
+    const trashIds = allIds.filter(id=>store[id].deleted);
+    const activeIds = allIds.filter(id=>!store[id].deleted);
+    document.getElementById('trashCount').textContent = trashIds.length ? `(${trashIds.length})` : '';
+
+    if(this.galleryView==='trash'){
+      trashIds.sort((a,b)=>(store[b].deletedAt||0)-(store[a].deletedAt||0));
+      if(!trashIds.length){
+        grid.innerHTML = `<div class="empty-hint" style="grid-column:1/-1;">Der Papierkorb ist leer.</div>`;
+        return;
+      }
+      let html='';
+      for(const id of trashIds){
+        const e = store[id];
+        const date = e.deletedAt ? new Date(e.deletedAt).toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'}) : '';
+        html += `<div class="project-card trashed" data-id="${id}">
+          <div class="thumb">${e.thumb?`<img src="${e.thumb}" alt="Vorschau">`:'<span class="placeholder">🪵</span>'}</div>
+          <div class="meta"><div class="pname">${escapeHtml(e.name||'Ohne Namen')}</div><div class="pdate">Gelöscht: ${date}</div></div>
+          <div class="card-actions">
+            <button data-act="restore">↺ Wiederherstellen</button>
+            <button data-act="purge">Endgültig löschen</button>
+          </div>
+        </div>`;
+      }
+      grid.innerHTML = html;
+      grid.querySelectorAll('.project-card[data-id]').forEach(card=>{
+        const id = card.dataset.id;
+        card.querySelector('[data-act="restore"]').addEventListener('click', e=>{ e.stopPropagation(); this.restoreProjectInGallery(id); });
+        card.querySelector('[data-act="purge"]').addEventListener('click', e=>{ e.stopPropagation(); this.permanentlyDeleteProjectInGallery(id); });
+      });
+      return;
+    }
+
+    activeIds.sort((a,b)=>(store[b].updatedAt||0)-(store[a].updatedAt||0));
+    let html = `<div class="project-card new-card" id="galleryNewCard">+ Neuer Bauplan</div>`;
+    for(const id of activeIds){
+      const e = store[id];
+      const date = e.updatedAt ? new Date(e.updatedAt).toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'}) : '';
+      const activeTag = id===this.projectId ? ' (aktuell)' : '';
+      html += `<div class="project-card" data-id="${id}">
+        <div class="thumb">${e.thumb?`<img src="${e.thumb}" alt="Vorschau">`:'<span class="placeholder">🪵</span>'}</div>
+        <div class="meta"><div class="pname">${escapeHtml(e.name||'Ohne Namen')}${activeTag}</div><div class="pdate">${date}</div></div>
+        <div class="card-actions">
+          <button data-act="open">Öffnen</button>
+          <button data-act="rename">Umben.</button>
+          <button data-act="dup">Duplizieren</button>
+          <button data-act="del">Löschen</button>
+        </div>
+      </div>`;
+    }
+    grid.innerHTML = html;
+    document.getElementById('galleryNewCard').onclick=()=>this.createNewProjectFromGallery();
+    grid.querySelectorAll('.project-card[data-id]').forEach(card=>{
+      const id = card.dataset.id;
+      card.addEventListener('click', ()=>this.openProjectById(id));
+      card.querySelector('[data-act="open"]').addEventListener('click', e=>{ e.stopPropagation(); this.openProjectById(id); });
+      card.querySelector('[data-act="rename"]').addEventListener('click', e=>{ e.stopPropagation(); this.renameProjectInGallery(id); });
+      card.querySelector('[data-act="dup"]').addEventListener('click', e=>{ e.stopPropagation(); this.duplicateProjectInGallery(id); });
+      card.querySelector('[data-act="del"]').addEventListener('click', e=>{ e.stopPropagation(); this.deleteProjectInGallery(id); });
+    });
+  }
+
+  createNewProjectFromGallery(){
+    this.createNewProjectSilently();
+    this.closeGallery();
+  }
+
+  createNewProjectSilently(){
+    this.persistActiveProject();
+    this.projectId = Geo.uid();
+    this.project = newProject();
+    this.selection.clear();
+    this.history = new History(this); this.history.snapshot();
+    SafeStorage.set(ACTIVE_KEY, this.projectId);
+    this.persistActiveProject();
+    this.afterProjectReplaced();
+    this.render(); this.renderLayers(); this.renderParts();
+  }
+
+  openProjectById(id){
+    this.switchToProject(id);
+    this.closeGallery();
+  }
+
+  switchToProject(id){
+    const store = this.loadStore();
+    const entry = store[id]; if(!entry) return;
+    this.persistActiveProject(); // aktuellen Stand zuerst sichern
+    this.projectId = id;
+    this.project = JSON.parse(JSON.stringify(entry.project));
+    this.selection.clear();
+    this.history = new History(this); this.history.snapshot();
+    SafeStorage.set(ACTIVE_KEY, id);
+    this.afterProjectReplaced();
+    this.render(); this.renderLayers(); this.renderParts();
+  }
+
+  renameProjectInGallery(id){
+    const store = this.loadStore(); const entry = store[id]; if(!entry) return;
+    this.showGenericModal('Bauplan umbenennen', `
+      <div class="field-row"><label>Name</label><input type="text" id="gRenameInput" value="${escapeHtml(entry.name||'')}" style="width:220px;"></div>
+    `, ()=>{
+      const name = document.getElementById('gRenameInput').value.trim();
+      if(!name) return;
+      const store2 = this.loadStore(); const entry2 = store2[id]; if(!entry2) return;
+      entry2.name = name; entry2.project.meta.name = name; entry2.updatedAt = Date.now();
+      store2[id] = entry2; this.saveStore(store2);
+      if(id===this.projectId){ this.project.meta.name = name; document.getElementById('projName').value = name; }
+      this.renderGalleryGrid();
+    }, 'Speichern');
+  }
+
+  duplicateProjectInGallery(id){
+    const store = this.loadStore(); const entry = store[id]; if(!entry) return;
+    const newId = Geo.uid();
+    const copy = JSON.parse(JSON.stringify(entry.project));
+    copy.meta.name = (copy.meta.name || 'Projekt') + ' (Kopie)';
+    store[newId] = { id:newId, name:copy.meta.name, updatedAt:Date.now(), project:copy, thumb: entry.thumb || null };
+    this.saveStore(store);
+    this.renderGalleryGrid();
+  }
+
+  deleteProjectInGallery(id){
+    const store = this.loadStore(); const entry = store[id]; if(!entry) return;
+    this.showConfirm(
+      `Bauplan "${entry.name}" wirklich löschen?\nEr wird in den Papierkorb verschoben und kann dort wiederhergestellt werden.`,
+      ()=>{
+        const store2 = this.loadStore(); const entry2 = store2[id]; if(!entry2) return;
+        entry2.deleted = true;
+        entry2.deletedAt = Date.now();
+        store2[id] = entry2;
+        this.saveStore(store2);
+        if(id===this.projectId){
+          const ids = Object.keys(store2).filter(k=>!store2[k].deleted);
+          if(ids.length) this.switchToProject(ids[0]);
+          else this.createNewProjectSilently();
+        }
+        this.renderGalleryGrid();
+      },
+      { title:'Bauplan löschen', okLabel:'Löschen' }
+    );
+  }
+
+  restoreProjectInGallery(id){
+    const store = this.loadStore(); const entry = store[id]; if(!entry) return;
+    entry.deleted = false;
+    entry.deletedAt = null;
+    entry.updatedAt = Date.now();
+    store[id] = entry;
+    this.saveStore(store);
+    this.renderGalleryGrid();
+  }
+
+  permanentlyDeleteProjectInGallery(id){
+    const store = this.loadStore(); const entry = store[id]; if(!entry) return;
+    this.showConfirm(
+      `Bauplan "${entry.name}" endgültig und unwiderruflich löschen?`,
+      ()=>{
+        const store2 = this.loadStore();
+        delete store2[id];
+        this.saveStore(store2);
+        this.renderGalleryGrid();
+      },
+      { title:'Endgültig löschen', okLabel:'Endgültig löschen' }
+    );
+  }
+  exportJSON(){
+    downloadText(JSON.stringify(this.project,null,2), (this.project.meta.name||'projekt')+'.json', 'application/json');
+  }
+  onFileSelected(e){
+    const file=e.target.files[0]; if(!file) return;
+    const reader=new FileReader();
+    reader.onload=()=>{
+      try{
+        const data=JSON.parse(reader.result);
+        if(!data.shapes || !data.layers) throw new Error('Ungültiges Format');
+        this.project=data; this.afterProjectReplaced(); this.history=new History(this); this.history.snapshot();
+        this.render(); this.renderLayers(); this.renderParts();
+      }catch(err){ alert('Datei konnte nicht geladen werden: '+err.message); }
+    };
+    reader.readAsText(file);
+    e.target.value='';
+  }
+  exportPNG(){
+    const link=document.createElement('a');
+    link.download=(this.project.meta.name||'plan')+'.png';
+    link.href=this.canvas.toDataURL('image/png');
+    link.click();
+  }
+  exportPDF(){
+    if(!window.jspdf){ alert('PDF-Bibliothek konnte nicht geladen werden (Internetverbindung erforderlich).'); return; }
+    const { jsPDF } = window.jspdf;
+    const wrap=document.getElementById('canvasWrap');
+    const orientation = wrap.clientWidth>wrap.clientHeight ? 'l':'p';
+    const doc = new jsPDF({orientation, unit:'mm', format:'a4'});
+    const imgData = this.canvas.toDataURL('image/png');
+    const pageW=doc.internal.pageSize.getWidth(), pageH=doc.internal.pageSize.getHeight();
+    const margin=10, titleH=18;
+    const drawW=pageW-margin*2, drawH=pageH-margin*2-titleH;
+    doc.addImage(imgData, 'PNG', margin, margin, drawW, drawH, undefined, 'FAST');
+    // Titelblock
+    const ty = pageH-margin-titleH+4;
+    doc.setDrawColor(180); doc.rect(margin, pageH-margin-titleH, drawW, titleH);
+    doc.setFontSize(9);
+    doc.text(`Projekt: ${this.project.meta.name}`, margin+3, ty+2);
+    doc.text(`Zeichnung: Bauplan`, margin+3, ty+8);
+    doc.text(`Maßstab: 1:${this.scaleDenominator}`, margin+90, ty+2);
+    doc.text(`Datum: ${this.project.meta.date}`, margin+90, ty+8);
+    doc.text(`Erstellt mit: Bauplan-Zeichner (Web-App)`, margin+drawW-70, ty+2);
+    doc.save((this.project.meta.name||'plan')+'.pdf');
+  }
+
+  updateStatus(){
+    document.getElementById('statZoom').textContent='Zoom: '+Math.round(this.camera.zoom*100)+'%';
+    document.getElementById('statScale').textContent='Maßstab: 1:'+this.scaleDenominator;
+    document.getElementById('statSnap').textContent='Snap: '+(this.snap?'an':'aus');
+  }
+}
+
+/* =========================================================
+   5. FREIE HILFSFUNKTIONEN
+   ========================================================= */
+function getCssVar(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+function gv(id){ return document.getElementById(id).value; }
+function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function labelForType(t){ return {line:'Linie',rect:'Rechteck',circle:'Kreis',halfcircle:'Halbkreis',text:'Text',dimension:'Maßlinie',woodpart:'Holzbauteil',hole:'Bohrloch'}[t]||t; }
+function distToSegment(px,py,x1,y1,x2,y2){
+  const dx=x2-x1, dy=y2-y1; const len2=dx*dx+dy*dy;
+  if(len2===0) return Geo.dist(px,py,x1,y1);
+  let t=((px-x1)*dx+(py-y1)*dy)/len2; t=Geo.clamp(t,0,1);
+  const cx=x1+t*dx, cy=y1+t*dy;
+  return Geo.dist(px,py,cx,cy);
+}
+function drawArrowHead(ctx, tip, from, size){
+  const ang=Math.atan2(tip.y-from.y, tip.x-from.x);
+  ctx.save(); ctx.fillStyle=ctx.strokeStyle;
+  ctx.beginPath();
+  ctx.moveTo(tip.x,tip.y);
+  ctx.lineTo(tip.x-size*Math.cos(ang-Math.PI/7), tip.y-size*Math.sin(ang-Math.PI/7));
+  ctx.lineTo(tip.x-size*Math.cos(ang+Math.PI/7), tip.y-size*Math.sin(ang+Math.PI/7));
+  ctx.closePath(); ctx.fill(); ctx.restore();
+}
+function downloadText(text, filename, mime){
+  const blob=new Blob([text], {type:mime});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=filename; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+
+/* ---------- Warnung bei ungespeicherten Änderungen ---------- */
+window.addEventListener('beforeunload', function(e){
+  if(window.__app && window.__app.dirty){ e.preventDefault(); e.returnValue=''; }
+});
+
+/* =========================================================
+   6. START
+   ========================================================= */
+window.addEventListener('DOMContentLoaded', ()=>{
+  window.__app = new App();
+});
+
+// Service Worker registrieren, damit die App offline funktioniert und sich sauber
+// installieren lässt (nur möglich, wenn über http/https gehostet, nicht bei file://)
+if('serviceWorker' in navigator && (location.protocol==='https:' || location.hostname==='localhost')){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{ /* Offline-Unterstützung optional */ });
+  });
+}
+})();
+</script>
+</body>
+</html>
